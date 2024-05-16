@@ -37,6 +37,8 @@ impl Particle {
     fn update(&mut self, dt: f32) {
         self.vel.y += Self::GRAVITY * dt;
         self.pos += self.vel * dt;
+
+        self.clamp_pos_within_borders();
     }
 
     fn draw(&self) {
@@ -49,6 +51,25 @@ impl Particle {
             Self::RADIUS * screen_width(),
             self.color,
         );
+    }
+
+    fn clamp_pos_within_borders(&mut self) {
+        self.pos.x = self.pos.x.clamp(0., 1.);
+        self.pos.y = self.pos.y.clamp(0., 1.);
+
+        // if particle was colliding with the wall, set vel to zero along this axis
+        if self.pos.x == 0. || self.pos.x == 1. {
+            self.vel.x = 0.;
+        }
+        if self.pos.y == 0. || self.pos.y == 1. {
+            self.vel.y = 0.;
+        }
+    }
+
+    fn collides_with(&self, other: &Particle) -> bool {
+        let dist = (self.pos - other.pos).length();
+
+        dist < 2. * Self::RADIUS
     }
 }
 
@@ -63,10 +84,38 @@ impl Simulation {
         }
     }
 
+    fn handle_collision(&mut self, a_id: usize, b_id: usize) {
+        let a = &self.particles[a_id];
+        let b = &self.particles[b_id];
+
+        if a_id == b_id || !a.collides_with(b) {
+            return;
+        }
+
+        let vec_a_to_b = b.pos - a.pos;
+
+        let a = &mut self.particles[a_id];
+        a.vel = Vec2::ZERO;
+        a.pos -= vec_a_to_b * 0.5;
+
+        let b = &mut self.particles[b_id];
+        b.vel = Vec2::ZERO;
+        b.pos += vec_a_to_b * 0.5;
+    }
+
+    fn handle_colliosions(&mut self) {
+        for a_id in 0..self.particles.len() {
+            for b_id in 0..self.particles.len() {
+                self.handle_collision(a_id, b_id);
+            }
+        }
+    }
+
     fn update(&mut self, dt: f32) {
         for particle in self.particles.iter_mut() {
             particle.update(dt);
         }
+        self.handle_colliosions();
     }
 
     fn draw(&self) {
@@ -104,11 +153,11 @@ impl GameState {
         }
     }
 
-    fn handle_inputs(&mut self){
+    fn handle_inputs(&mut self) {
         if is_key_pressed(KeyCode::S) {
             self.simulation.spawn_particle();
         }
-        if is_mouse_button_pressed(MouseButton::Left){
+        if is_mouse_button_pressed(MouseButton::Left) {
             self.simulation.spawn_at_mouse();
         }
     }
