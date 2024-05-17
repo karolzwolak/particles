@@ -219,7 +219,15 @@ impl GameState {
     }
 }
 
-#[macroquad::main("Particle simulation")]
+fn config() -> Conf {
+    Conf {
+        window_title: "Particle simulation".to_string(),
+        fullscreen: true,
+        ..Default::default()
+    }
+}
+
+#[macroquad::main(config)]
 async fn main() {
     let mut game_state = GameState::new();
 
