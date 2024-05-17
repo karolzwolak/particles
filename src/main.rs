@@ -162,7 +162,10 @@ impl Simulation {
     fn spawn_at_mouse(&mut self) {
         let mouse = mouse_position();
         let dimension = Self::dimension();
-        let pos = Vec2::new(mouse.0 / dimension, mouse.1 / dimension);
+
+        let x = (mouse.0 - screen_width() * 0.5)/ dimension;
+        let y = (mouse.1 - screen_height() * 0.5) / dimension;
+        let pos = Vec2::new(x, y);
         let vel = Vec2::ZERO;
 
         let particle = Particle::new(pos, vel, None);
