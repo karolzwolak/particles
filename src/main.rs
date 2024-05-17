@@ -1,5 +1,8 @@
 use macroquad::prelude::*;
 
+const TARGET_FPS: u32 = 60;
+const TARGET_DT: f32 = 1. / TARGET_FPS as f32;
+
 #[derive(Clone, Copy)]
 /// Positon is not relative to the screen size
 /// It is in range [0, 1]
@@ -7,7 +10,7 @@ use macroquad::prelude::*;
 /// We do not need accelaration, is it will be constant and equal to gravity
 struct Particle {
     pos: Vec2,
-    vel: Vec2,
+    prev_pos: Vec2,
     color: Color,
 }
 
@@ -17,6 +20,7 @@ impl Particle {
     const RADIUS: f32 = 0.01;
 
     const GRAVITY: f32 = 0.5;
+    const GRAVITY_VEC: Vec2 = Vec2::new(0., Self::GRAVITY);
 
     fn random_color() -> Color {
         Color::new(
@@ -26,19 +30,20 @@ impl Particle {
             1.,
         )
     }
-    fn new(position: Vec2, velocity: Vec2, color: Option<Color>) -> Self {
+    fn new(position: Vec2, initial_velocity: Vec2, color: Option<Color>) -> Self {
         Particle {
             pos: position,
-            vel: velocity,
+            prev_pos: position - initial_velocity * TARGET_DT,
             color: color.unwrap_or_else(|| Self::random_color()),
         }
     }
 
-    fn update(&mut self, dt: f32) {
-        self.vel.y += Self::GRAVITY * dt;
-        self.pos += self.vel * dt;
+    fn update_verlet(&mut self, dt: f32) {
+        let new_pos = 2. * self.pos - self.prev_pos + Self::GRAVITY_VEC * dt * dt;
+        self.prev_pos = self.pos;
+        self.pos = new_pos;
 
-        self.clamp_pos_within_borders();
+        self.constraint();
     }
 
     fn draw(&self) {
@@ -53,23 +58,13 @@ impl Particle {
         );
     }
 
-    fn clamp_pos_within_borders(&mut self) {
+    fn constraint(&mut self) {
         self.pos.x = self.pos.x.clamp(0., 1.);
         self.pos.y = self.pos.y.clamp(0., 1.);
-
-        // if particle was colliding with the wall, set vel to zero along this axis
-        if self.pos.x == 0. || self.pos.x == 1. {
-            self.vel.x = 0.;
-        }
-        if self.pos.y == 0. || self.pos.y == 1. {
-            self.vel.y = 0.;
-        }
     }
 
-    fn collides_with(&self, other: &Particle) -> bool {
-        let dist = (self.pos - other.pos).length();
-
-        dist < 2. * Self::RADIUS
+    fn distance(&self, other: &Particle) -> f32 {
+        (self.pos - other.pos).length()
     }
 }
 
@@ -88,19 +83,21 @@ impl Simulation {
         let a = &self.particles[a_id];
         let b = &self.particles[b_id];
 
-        if a_id == b_id || !a.collides_with(b) {
+        let dist_a_b = a.distance(b);
+        let max_dist = 2. * Particle::RADIUS;
+        let collision = dist_a_b < max_dist;
+
+        if a_id == b_id || !collision {
             return;
         }
 
-        let vec_a_to_b = b.pos - a.pos;
+        let delta_a_b = (b.pos - a.pos).normalize() * (max_dist - dist_a_b) * 0.5;
 
         let a = &mut self.particles[a_id];
-        a.vel = Vec2::ZERO;
-        a.pos -= vec_a_to_b * 0.5;
+        a.pos -= delta_a_b;
 
         let b = &mut self.particles[b_id];
-        b.vel = Vec2::ZERO;
-        b.pos += vec_a_to_b * 0.5;
+        b.pos += delta_a_b;
     }
 
     fn handle_colliosions(&mut self) {
@@ -113,7 +110,7 @@ impl Simulation {
 
     fn update(&mut self, dt: f32) {
         for particle in self.particles.iter_mut() {
-            particle.update(dt);
+            particle.update_verlet(dt);
         }
         self.handle_colliosions();
     }
