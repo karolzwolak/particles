@@ -5,9 +5,9 @@ const TARGET_DT: f32 = 1. / TARGET_FPS as f32;
 
 #[derive(Clone, Copy)]
 /// Positon is not relative to the screen size
-/// It is in range [0, 1]
-/// (0, 0) is the top left corner
-/// We do not need accelaration, is it will be constant and equal to gravity
+/// It is in range [-1, 1]
+/// where (0, 0) is the center of the screen
+/// and 1 in any direction is half of smallest screen dimension
 struct Particle {
     pos: Vec2,
     prev_pos: Vec2,
@@ -21,6 +21,8 @@ impl Particle {
 
     const GRAVITY: f32 = 0.5;
     const GRAVITY_VEC: Vec2 = Vec2::new(0., Self::GRAVITY);
+
+    const CONSTRAINT_CENTER: Vec2 = Vec2::ZERO;
 
     fn random_color() -> Color {
         Color::new(
@@ -47,20 +49,28 @@ impl Particle {
     }
 
     fn draw(&self) {
-        let screen_x = self.pos.x * screen_width();
-        let screen_y = self.pos.y * screen_height();
+        let dim = Simulation::dimension();
+
+        let screen_x = screen_width() * 0.5 + self.pos.x * dim;
+        let screen_y = screen_height() * 0.5 + self.pos.y * dim;
 
         draw_circle(
             screen_x,
             screen_y,
-            Self::RADIUS * screen_width(),
+            Self::RADIUS * dim,
             self.color,
         );
     }
 
     fn constraint(&mut self) {
-        self.pos.x = self.pos.x.clamp(0., 1.);
-        self.pos.y = self.pos.y.clamp(0., 1.);
+        let delta = self.pos - Self::CONSTRAINT_CENTER;
+        let max_dist = Simulation::CONSTRAINT_RADIUS - Self::RADIUS;
+        let dist = delta.length();
+
+        if dist > max_dist{
+            // self.pos = Self::CONSTRAINT_CENTER + delta.normalize() * (Simulation::CONSTRAINT_RADIUS - Self::RADIUS);
+            self.pos -= delta.normalize() * (dist - max_dist);
+        }
     }
 
     fn distance(&self, other: &Particle) -> f32 {
@@ -73,6 +83,13 @@ struct Simulation {
 }
 
 impl Simulation {
+    /// 90% of the whole area
+    const CONSTRAINT_RADIUS: f32 = 0.9 * 0.5;
+
+    fn dimension() -> f32 {
+        screen_width().min(screen_height())
+    }
+
     fn new() -> Self {
         Simulation {
             particles: vec![Particle::new(Vec2::new(0., 0.), Vec2::new(0., 0.), None)],
@@ -115,14 +132,27 @@ impl Simulation {
         self.handle_colliosions();
     }
 
+    fn draw_constraint(&self) {
+        draw_poly_lines(
+            screen_width() * 0.5,
+            screen_height() * 0.5,
+            64,
+            Self::CONSTRAINT_RADIUS * Self::dimension(),
+            0.,
+            2.,
+            WHITE,
+        );
+    }
+
     fn draw(&self) {
         for particle in self.particles.iter() {
             particle.draw();
         }
+        self.draw_constraint();
     }
 
     fn spawn_particle(&mut self) {
-        let pos = Vec2::new(0., 0.1);
+        let pos = Vec2::new(-0.3, 0.);
         let vel = Vec2::new(0.5, 0.);
 
         let particle = Particle::new(pos, vel, None);
@@ -131,7 +161,8 @@ impl Simulation {
 
     fn spawn_at_mouse(&mut self) {
         let mouse = mouse_position();
-        let pos = Vec2::new(mouse.0 / screen_width(), mouse.1 / screen_height());
+        let dimension = Self::dimension();
+        let pos = Vec2::new(mouse.0 / dimension, mouse.1 / dimension);
         let vel = Vec2::ZERO;
 
         let particle = Particle::new(pos, vel, None);
