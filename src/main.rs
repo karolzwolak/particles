@@ -14,7 +14,7 @@ struct Particle {
 impl Particle {
     /// The radius of the particle
     /// With a radius of 1, the particle will be as big as the screen
-    const RADIUS: f32 = 0.01;
+    const RADIUS: f32 = 0.005;
 
     const GRAVITY: f32 = 0.5;
     const GRAVITY_VEC: Vec2 = Vec2::new(0., Self::GRAVITY);
@@ -67,23 +67,63 @@ impl Particle {
     }
 }
 
+type Cell = Vec<usize>;
+type Grid = Vec<Cell>;
+
 struct Simulation {
     particles: Vec<Particle>,
+    /// grid is flat array of cells
+    /// each cell contains indeces of particles that are in that cell
+    grid: Grid,
 }
 
 impl Simulation {
     /// 90% of the whole area
     const CONSTRAINT_RADIUS: f32 = 0.9 * 0.5;
 
-    const SUBSTEPS: u32 = 2;
+    const GRID_ROW_COUNT: usize = 200;
+    const CELL_SIZE: f32 = 1. / Self::GRID_ROW_COUNT as f32;
+
+    const SUBSTEPS: u32 = 8;
+
+    const SPAWN_RATE: usize = 10;
 
     fn dimension() -> f32 {
         screen_width().min(screen_height())
     }
 
     fn new() -> Self {
-        Simulation {
-            particles: vec![Particle::new(Vec2::new(0., 0.), Vec2::new(0., 0.), None)],
+        let mut res = Simulation {
+            particles: Vec::new(),
+            grid: vec![Vec::new(); Self::GRID_ROW_COUNT * Self::GRID_ROW_COUNT],
+        };
+        res.populate_grid();
+        res
+    }
+
+    fn cell_id(row: usize, col: usize) -> usize {
+        row * Self::GRID_ROW_COUNT + col
+    }
+
+    fn pos_cell(pos: Vec2) -> (usize, usize) {
+        let y = (pos.y + 1.) * 0.5;
+        let x = (pos.x + 1.) * 0.5;
+
+        let row = (y * Self::GRID_ROW_COUNT as f32) as usize;
+        let col = (x * Self::GRID_ROW_COUNT as f32) as usize;
+
+        (row, col)
+    }
+
+    fn populate_grid(&mut self) {
+        for cell in self.grid.iter_mut() {
+            cell.clear();
+        }
+
+        for (i, particle) in self.particles.iter().enumerate() {
+            let (row, col) = Self::pos_cell(particle.pos);
+            let cell_id = Self::cell_id(row, col);
+            self.grid[cell_id].push(i);
         }
     }
 
@@ -108,15 +148,45 @@ impl Simulation {
         b.pos += delta_a_b;
     }
 
-    fn handle_collisions(&mut self) {
-        for a_id in 0..self.particles.len() {
-            for b_id in 0..self.particles.len() {
+    fn handle_collisions_two_cells(&mut self, grid: &mut Grid, id1: usize, id2: usize) {
+        for &a_id in &grid[id1] {
+            for &b_id in &grid[id2] {
                 self.handle_collision(a_id, b_id);
             }
         }
     }
 
+    fn handle_collisions(&mut self) {
+        let mut grid = std::mem::take(&mut self.grid);
+        if Self::GRID_ROW_COUNT <= 2 {
+            for i in 0..self.particles.len() {
+                for j in 0..self.particles.len() {
+                    self.handle_collision(i, j);
+                }
+            }
+            std::mem::swap(&mut self.grid, &mut grid);
+            return;
+        }
+
+        for row in 1..Self::GRID_ROW_COUNT - 1 {
+            for col in 1..Self::GRID_ROW_COUNT - 1 {
+                let id1 = Self::cell_id(row, col);
+                for row_offset in -1..=1 {
+                    for col_offset in -1..=1 {
+                        let id2 = Self::cell_id(
+                            (row as isize + row_offset) as usize,
+                            (col as isize + col_offset) as usize,
+                        );
+                        self.handle_collisions_two_cells(&mut grid, id1, id2);
+                    }
+                }
+            }
+        }
+        std::mem::swap(&mut self.grid, &mut grid);
+    }
+
     fn update_once(&mut self, dt: f32) {
+        self.populate_grid();
         self.handle_collisions();
         for particle in self.particles.iter_mut() {
             particle.update_verlet(dt);
@@ -150,12 +220,25 @@ impl Simulation {
         self.draw_constraint();
     }
 
-    fn spawn_particle(&mut self) {
-        let pos = Vec2::new(-0.3, 0.);
-        let vel = Vec2::new(1.0, 0.);
+    fn add_particle(&mut self, particle: Particle) {
+        let (row, col) = Self::pos_cell(particle.pos);
+        let cell_id = Self::cell_id(row, col);
+        self.grid[cell_id].push(self.particles.len());
 
-        let particle = Particle::new(pos, vel, None);
         self.particles.push(particle);
+    }
+
+    fn spawn_particles(&mut self) {
+        let vel = Vec2::new(1.0, 0.);
+        let pos = Vec2::new(-0.3, 0.);
+
+        for i in 0..Self::SPAWN_RATE {
+            let y_offset = i as f32 * Particle::RADIUS * 2.0;
+            let pos = pos + Vec2::new(0., y_offset);
+
+            let particle = Particle::new(pos, vel, None);
+            self.add_particle(particle);
+        }
     }
 
     fn spawn_at_mouse(&mut self) {
@@ -168,7 +251,7 @@ impl Simulation {
         let vel = Vec2::ZERO;
 
         let particle = Particle::new(pos, vel, None);
-        self.particles.push(particle);
+        self.add_particle(particle);
     }
 }
 
@@ -187,10 +270,10 @@ impl GameState {
 
     fn handle_inputs(&mut self) {
         if is_key_pressed(KeyCode::S) {
-            self.simulation.spawn_particle();
+            self.simulation.spawn_particles();
         }
         if is_key_down(KeyCode::A) {
-            self.simulation.spawn_particle();
+            self.simulation.spawn_particles();
         }
         if is_mouse_button_pressed(MouseButton::Left) {
             self.simulation.spawn_at_mouse();
