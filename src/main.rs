@@ -1,8 +1,5 @@
 use macroquad::prelude::*;
 
-const TARGET_FPS: u32 = 60;
-const TARGET_DT: f32 = 1. / TARGET_FPS as f32;
-
 #[derive(Clone, Copy)]
 /// Positon is not relative to the screen size
 /// It is in range [-1, 1]
@@ -35,8 +32,8 @@ impl Particle {
     fn new(position: Vec2, initial_velocity: Vec2, color: Option<Color>) -> Self {
         Particle {
             pos: position,
-            prev_pos: position - initial_velocity * TARGET_DT,
-            color: color.unwrap_or_else(|| Self::random_color()),
+            prev_pos: position - initial_velocity * get_frame_time(),
+            color: color.unwrap_or_else(Self::random_color),
         }
     }
 
@@ -44,8 +41,6 @@ impl Particle {
         let new_pos = 2. * self.pos - self.prev_pos + Self::GRAVITY_VEC * dt * dt;
         self.prev_pos = self.pos;
         self.pos = new_pos;
-
-        self.constraint();
     }
 
     fn draw(&self) {
@@ -54,12 +49,7 @@ impl Particle {
         let screen_x = screen_width() * 0.5 + self.pos.x * dim;
         let screen_y = screen_height() * 0.5 + self.pos.y * dim;
 
-        draw_circle(
-            screen_x,
-            screen_y,
-            Self::RADIUS * dim,
-            self.color,
-        );
+        draw_circle(screen_x, screen_y, Self::RADIUS * dim, self.color);
     }
 
     fn constraint(&mut self) {
@@ -67,8 +57,7 @@ impl Particle {
         let max_dist = Simulation::CONSTRAINT_RADIUS - Self::RADIUS;
         let dist = delta.length();
 
-        if dist > max_dist{
-            // self.pos = Self::CONSTRAINT_CENTER + delta.normalize() * (Simulation::CONSTRAINT_RADIUS - Self::RADIUS);
+        if dist > max_dist {
             self.pos -= delta.normalize() * (dist - max_dist);
         }
     }
@@ -85,6 +74,8 @@ struct Simulation {
 impl Simulation {
     /// 90% of the whole area
     const CONSTRAINT_RADIUS: f32 = 0.9 * 0.5;
+
+    const SUBSTEPS: u32 = 2;
 
     fn dimension() -> f32 {
         screen_width().min(screen_height())
@@ -117,7 +108,7 @@ impl Simulation {
         b.pos += delta_a_b;
     }
 
-    fn handle_colliosions(&mut self) {
+    fn handle_collisions(&mut self) {
         for a_id in 0..self.particles.len() {
             for b_id in 0..self.particles.len() {
                 self.handle_collision(a_id, b_id);
@@ -125,11 +116,19 @@ impl Simulation {
         }
     }
 
-    fn update(&mut self, dt: f32) {
+    fn update_once(&mut self, dt: f32) {
+        self.handle_collisions();
         for particle in self.particles.iter_mut() {
             particle.update_verlet(dt);
+            particle.constraint();
         }
-        self.handle_colliosions();
+    }
+
+    fn update_substeps(&mut self, dt: f32) {
+        let substep_dt = dt / Self::SUBSTEPS as f32;
+        for _ in 0..Self::SUBSTEPS {
+            self.update_once(substep_dt);
+        }
     }
 
     fn draw_constraint(&self) {
@@ -153,7 +152,7 @@ impl Simulation {
 
     fn spawn_particle(&mut self) {
         let pos = Vec2::new(-0.3, 0.);
-        let vel = Vec2::new(0.5, 0.);
+        let vel = Vec2::new(1.0, 0.);
 
         let particle = Particle::new(pos, vel, None);
         self.particles.push(particle);
@@ -163,7 +162,7 @@ impl Simulation {
         let mouse = mouse_position();
         let dimension = Self::dimension();
 
-        let x = (mouse.0 - screen_width() * 0.5)/ dimension;
+        let x = (mouse.0 - screen_width() * 0.5) / dimension;
         let y = (mouse.1 - screen_height() * 0.5) / dimension;
         let pos = Vec2::new(x, y);
         let vel = Vec2::ZERO;
@@ -178,7 +177,6 @@ struct GameState {
 }
 
 impl GameState {
-
     const FONT_SIZE: f32 = 30.;
 
     fn new() -> Self {
@@ -211,7 +209,7 @@ impl GameState {
     }
 
     fn update(&mut self, dt: f32) {
-        self.simulation.update(dt);
+        self.simulation.update_substeps(dt);
     }
 
     fn draw(&self) {
