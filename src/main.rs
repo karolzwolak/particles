@@ -175,6 +175,9 @@ struct GameState {
 }
 
 impl GameState {
+
+    const FONT_SIZE: f32 = 30.;
+
     fn new() -> Self {
         GameState {
             simulation: Simulation::new(),
@@ -185,9 +188,23 @@ impl GameState {
         if is_key_pressed(KeyCode::S) {
             self.simulation.spawn_particle();
         }
+        if is_key_down(KeyCode::A) {
+            self.simulation.spawn_particle();
+        }
         if is_mouse_button_pressed(MouseButton::Left) {
             self.simulation.spawn_at_mouse();
         }
+    }
+
+    fn display_stats(&self) {
+        let particles = self.simulation.particles.len();
+        let text = format!("Particles: {}", particles);
+
+        draw_text(&text, 10., 20., Self::FONT_SIZE, WHITE);
+
+        let fps = get_fps();
+        let text = format!("FPS: {:.2}", fps);
+        draw_text(&text, 10., 50., Self::FONT_SIZE, WHITE);
     }
 
     fn update(&mut self, dt: f32) {
@@ -197,6 +214,7 @@ impl GameState {
     fn draw(&self) {
         clear_background(BLACK);
         self.simulation.draw();
+        self.display_stats();
     }
 }
 
@@ -209,6 +227,7 @@ async fn main() {
         game_state.handle_inputs();
         game_state.update(delta_time);
         game_state.draw();
+
         next_frame().await;
     }
 }
