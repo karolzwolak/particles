@@ -156,35 +156,26 @@ impl Simulation {
     }
 
     fn handle_collisions(&mut self) {
-        if Self::GRID_ROW_COUNT <= 2 {
-            for i in 0..self.grid.len() {
-                for j in 0..self.grid.len() {
-                    self.handle_collisions_two_cells(i, j);
-                }
-            }
-            return;
-        }
-
         for row in 0..Self::GRID_ROW_COUNT {
             for col in 0..Self::GRID_ROW_COUNT {
                 let id1 = Self::cell_id(row, col);
                 if self.grid[id1].is_empty() {
                     continue;
                 }
-                if row == 0
-                    || row == Self::GRID_ROW_COUNT - 1
-                    || col == 0
-                    || col == Self::GRID_ROW_COUNT - 1
-                {
-                    self.handle_collisions_two_cells(id1, id1);
-                    continue;
-                }
                 for row_offset in -1..=1 {
                     for col_offset in -1..=1 {
-                        let id2 = Self::cell_id(
-                            (row as isize + row_offset) as usize,
-                            (col as isize + col_offset) as usize,
-                        );
+                        let new_row = row as isize + row_offset;
+                        let new_col = col as isize + col_offset;
+                        if new_row < 0 || new_col < 0 {
+                            continue;
+                        }
+                        let new_col = new_col as usize;
+                        let new_row = new_row as usize;
+                        if new_row >= Self::GRID_ROW_COUNT || new_col >= Self::GRID_ROW_COUNT {
+                            continue;
+                        }
+
+                        let id2 = Self::cell_id(new_row, new_col);
                         if self.grid[id2].is_empty() {
                             continue;
                         }
