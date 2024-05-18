@@ -61,16 +61,18 @@ impl Particle {
 struct Simulation {
     particles: Vec<Particle>,
 
-    grid_last_particle_id: Vec<Option<usize>>,
-    next_particle_neighbor: Vec<Option<usize>>,
+    grid_last_particle_id: [Option<u32>; Self::GRID_LEN],
+    next_particle_neighbor: Vec<Option<u32>>,
 }
 
 impl Simulation {
     /// 90% in every direction from center
     const CONSTRAINT_SIZE: f32 = 0.9;
 
-    const GRID_ROW_COUNT: usize = 300;
-    // const CELL_SIZE: f32 = 1. / Self::GRID_ROW_COUNT as f32;
+    const CELL_SIZE: f32 = Particle::RADIUS;
+    const GRID_ROW_COUNT: usize = (1. / Self::CELL_SIZE) as usize;
+
+    const GRID_LEN: usize = Self::GRID_ROW_COUNT * Self::GRID_ROW_COUNT;
 
     const SUBSTEPS: u32 = 8;
 
@@ -89,7 +91,7 @@ impl Simulation {
     fn new() -> Self {
         Simulation {
             particles: Vec::new(),
-            grid_last_particle_id: vec![None; Self::GRID_ROW_COUNT * Self::GRID_ROW_COUNT],
+            grid_last_particle_id: [None; Self::GRID_ROW_COUNT * Self::GRID_ROW_COUNT],
             next_particle_neighbor: Vec::new(),
         }
     }
@@ -113,7 +115,7 @@ impl Simulation {
 
     fn add_particle_to_cell(&mut self, cell_id: usize, particle_id: usize) {
         let last_particle_id =
-            std::mem::replace(&mut self.grid_last_particle_id[cell_id], Some(particle_id));
+            std::mem::replace(&mut self.grid_last_particle_id[cell_id], Some(particle_id as u32));
 
         self.next_particle_neighbor[particle_id] = last_particle_id;
     }
@@ -160,13 +162,11 @@ impl Simulation {
         while let Some(curr_i) = next_i {
             let mut next_j = self.grid_last_particle_id[cell_id2];
             while let Some(curr_j) = next_j {
-                self.handle_collision(curr_i, curr_j);
+                self.handle_collision(curr_i as usize, curr_j as usize);
 
-                next_j = self.next_particle_neighbor[curr_j];
-                assert_ne!(Some(curr_j), next_j);
+                next_j = self.next_particle_neighbor[curr_j as usize];
             }
-            next_i = self.next_particle_neighbor[curr_i];
-            assert_ne!(Some(curr_i), next_i);
+            next_i = self.next_particle_neighbor[curr_i as usize];
         }
     }
 
