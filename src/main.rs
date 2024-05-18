@@ -14,7 +14,7 @@ struct Particle {
 impl Particle {
     /// The radius of the particle
     /// With a radius of 1, the particle will be as big as the screen
-    const RADIUS: f32 = 0.005;
+    const RADIUS: f32 = 0.002;
 
     const GRAVITY: f32 = 0.5;
     const GRAVITY_VEC: Vec2 = Vec2::new(0., Self::GRAVITY);
@@ -32,7 +32,7 @@ impl Particle {
     fn new(position: Vec2, initial_velocity: Vec2, color: Option<Color>) -> Self {
         Particle {
             pos: position,
-            prev_pos: position - initial_velocity * get_frame_time(),
+            prev_pos: position - initial_velocity * get_frame_time() / Simulation::SUBSTEPS as f32,
             color: color.unwrap_or_else(Self::random_color),
         }
     }
@@ -82,7 +82,7 @@ impl Simulation {
     const CONSTRAINT_RADIUS: f32 = 0.9 * 0.5;
 
     const GRID_ROW_COUNT: usize = 200;
-    const CELL_SIZE: f32 = 1. / Self::GRID_ROW_COUNT as f32;
+    // const CELL_SIZE: f32 = 1. / Self::GRID_ROW_COUNT as f32;
 
     const SUBSTEPS: u32 = 8;
 
@@ -128,6 +128,9 @@ impl Simulation {
     }
 
     fn handle_collision(&mut self, a_id: usize, b_id: usize) {
+        if a_id == b_id {
+            return;
+        }
         let a = &self.particles[a_id];
         let b = &self.particles[b_id];
 
@@ -135,7 +138,7 @@ impl Simulation {
         let max_dist = 2. * Particle::RADIUS;
         let collision = dist_a_b < max_dist;
 
-        if a_id == b_id || !collision {
+        if !collision {
             return;
         }
 
@@ -148,41 +151,44 @@ impl Simulation {
         b.pos += delta_a_b;
     }
 
-    fn handle_collisions_two_cells(&mut self, grid: &mut Grid, id1: usize, id2: usize) {
-        for &a_id in &grid[id1] {
-            for &b_id in &grid[id2] {
-                self.handle_collision(a_id, b_id);
+    fn handle_collisions_two_cells(&mut self, id1: usize, id2: usize) {
+        for i in 0..self.grid[id1].len() {
+            for j in 0..self.grid[id2].len() {
+                self.handle_collision(self.grid[id1][i], self.grid[id2][j]);
             }
         }
     }
 
     fn handle_collisions(&mut self) {
-        let mut grid = std::mem::take(&mut self.grid);
         if Self::GRID_ROW_COUNT <= 2 {
-            for i in 0..self.particles.len() {
-                for j in 0..self.particles.len() {
-                    self.handle_collision(i, j);
+            for i in 0..self.grid.len() {
+                for j in 0..self.grid.len() {
+                    self.handle_collisions_two_cells(i, j);
                 }
             }
-            std::mem::swap(&mut self.grid, &mut grid);
             return;
         }
 
         for row in 1..Self::GRID_ROW_COUNT - 1 {
             for col in 1..Self::GRID_ROW_COUNT - 1 {
                 let id1 = Self::cell_id(row, col);
+                if self.grid[id1].is_empty() {
+                    continue;
+                }
                 for row_offset in -1..=1 {
                     for col_offset in -1..=1 {
                         let id2 = Self::cell_id(
                             (row as isize + row_offset) as usize,
                             (col as isize + col_offset) as usize,
                         );
-                        self.handle_collisions_two_cells(&mut grid, id1, id2);
+                        if self.grid[id2].is_empty() {
+                            continue;
+                        }
+                        self.handle_collisions_two_cells(id1, id2);
                     }
                 }
             }
         }
-        std::mem::swap(&mut self.grid, &mut grid);
     }
 
     fn update_once(&mut self, dt: f32) {
