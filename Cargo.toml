@@ -5,3 +5,7 @@ edition = "2021"
 
 [dependencies]
 macroquad = "0.4.5"
+
+[profile.release-with-debug]
+inherits = "release"
+debug = true
