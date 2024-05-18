@@ -56,10 +56,6 @@ impl Particle {
         self.pos.x = self.pos.x.clamp(-1., 1.);
         self.pos.y = self.pos.y.clamp(-1., 1.);
     }
-
-    fn distance(&self, other: &Particle) -> f32 {
-        (self.pos - other.pos).length()
-    }
 }
 
 type Cell = Vec<usize>;
@@ -130,15 +126,16 @@ impl Simulation {
         let a = &self.particles[a_id];
         let b = &self.particles[b_id];
 
-        let dist_a_b = a.distance(b);
-        let max_dist = 2. * Particle::RADIUS;
-        let collision = dist_a_b < max_dist;
+        let vec_a_b = b.pos - a.pos;
+        let dist_a_b = vec_a_b.length();
 
-        if !collision {
+        let max_dist = 2. * Particle::RADIUS;
+
+        if dist_a_b >= max_dist{
             return;
         }
 
-        let delta_a_b = (b.pos - a.pos).normalize() * (max_dist - dist_a_b) * 0.5;
+        let delta_a_b = vec_a_b * (max_dist - dist_a_b) * 0.5 / dist_a_b;
 
         let a = &mut self.particles[a_id];
         a.pos -= delta_a_b;
