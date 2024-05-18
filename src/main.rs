@@ -58,14 +58,11 @@ impl Particle {
     }
 }
 
-type Cell = Vec<usize>;
-type Grid = Vec<Cell>;
-
 struct Simulation {
     particles: Vec<Particle>,
-    /// grid is flat array of cells
-    /// each cell contains indeces of particles that are in that cell
-    grid: Grid,
+
+    grid_last_particle_id: Vec<Option<usize>>,
+    next_particle_neighbor: Vec<Option<usize>>,
 }
 
 impl Simulation {
@@ -83,10 +80,17 @@ impl Simulation {
         screen_width().min(screen_height())
     }
 
+    fn reset_grid(&mut self) {
+        for cell in self.grid_last_particle_id.iter_mut() {
+            *cell = None;
+        }
+    }
+
     fn new() -> Self {
         Simulation {
             particles: Vec::new(),
-            grid: vec![Vec::new(); Self::GRID_ROW_COUNT * Self::GRID_ROW_COUNT],
+            grid_last_particle_id: vec![None; Self::GRID_ROW_COUNT * Self::GRID_ROW_COUNT],
+            next_particle_neighbor: Vec::new(),
         }
     }
 
@@ -107,15 +111,21 @@ impl Simulation {
         )
     }
 
-    fn populate_grid(&mut self) {
-        for cell in self.grid.iter_mut() {
-            cell.clear();
-        }
+    fn add_particle_to_cell(&mut self, cell_id: usize, particle_id: usize) {
+        let last_particle_id =
+            std::mem::replace(&mut self.grid_last_particle_id[cell_id], Some(particle_id));
 
-        for (i, particle) in self.particles.iter().enumerate() {
+        self.next_particle_neighbor[particle_id] = last_particle_id;
+    }
+
+    fn populate_grid(&mut self) {
+        self.reset_grid();
+        for id in 0..self.particles.len() {
+            let particle = self.particles[id];
             let (row, col) = Self::pos_cell(particle.pos);
             let cell_id = Self::cell_id(row, col);
-            self.grid[cell_id].push(i);
+
+            self.add_particle_to_cell(cell_id, id);
         }
     }
 
@@ -131,7 +141,7 @@ impl Simulation {
 
         let max_dist = 2. * Particle::RADIUS;
 
-        if dist_a_b >= max_dist{
+        if dist_a_b >= max_dist {
             return;
         }
 
@@ -144,11 +154,19 @@ impl Simulation {
         b.pos += delta_a_b;
     }
 
-    fn handle_collisions_two_cells(&mut self, id1: usize, id2: usize) {
-        for i in 0..self.grid[id1].len() {
-            for j in 0..self.grid[id2].len() {
-                self.handle_collision(self.grid[id1][i], self.grid[id2][j]);
+    fn handle_collisions_two_cells(&mut self, cell_id1: usize, cell_id2: usize) {
+        let mut next_i = self.grid_last_particle_id[cell_id1];
+
+        while let Some(curr_i) = next_i {
+            let mut next_j = self.grid_last_particle_id[cell_id2];
+            while let Some(curr_j) = next_j {
+                self.handle_collision(curr_i, curr_j);
+
+                next_j = self.next_particle_neighbor[curr_j];
+                assert_ne!(Some(curr_j), next_j);
             }
+            next_i = self.next_particle_neighbor[curr_i];
+            assert_ne!(Some(curr_i), next_i);
         }
     }
 
@@ -156,7 +174,7 @@ impl Simulation {
         for row in 0..Self::GRID_ROW_COUNT {
             for col in 0..Self::GRID_ROW_COUNT {
                 let id1 = Self::cell_id(row, col);
-                if self.grid[id1].is_empty() {
+                if self.grid_last_particle_id[id1].is_none() {
                     continue;
                 }
                 for row_offset in -1..=1 {
@@ -173,7 +191,7 @@ impl Simulation {
                         }
 
                         let id2 = Self::cell_id(new_row, new_col);
-                        if self.grid[id2].is_empty() {
+                        if self.grid_last_particle_id[id2].is_none() {
                             continue;
                         }
                         self.handle_collisions_two_cells(id1, id2);
@@ -208,9 +226,11 @@ impl Simulation {
     fn add_particle(&mut self, particle: Particle) {
         let (row, col) = Self::pos_cell(particle.pos);
         let cell_id = Self::cell_id(row, col);
-        self.grid[cell_id].push(self.particles.len());
 
         self.particles.push(particle);
+        self.next_particle_neighbor.push(None);
+
+        self.add_particle_to_cell(cell_id, self.particles.len() - 1);
     }
 
     fn spawn_particles(&mut self) {
