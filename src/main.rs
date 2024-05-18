@@ -18,8 +18,7 @@ impl Particle {
 
     const GRAVITY: f32 = 0.5;
     const GRAVITY_VEC: Vec2 = Vec2::new(0., Self::GRAVITY);
-
-    const CONSTRAINT_CENTER: Vec2 = Vec2::ZERO;
+    const SCALE: f32 = 0.5 * Simulation::CONSTRAINT_SIZE;
 
     fn random_color() -> Color {
         Color::new(
@@ -44,22 +43,18 @@ impl Particle {
     }
 
     fn draw(&self) {
-        let dim = Simulation::dimension();
+        // we use half of the dimension, because the position is in range [-1, 1]
+        let half_dim = Simulation::dimension() * Self::SCALE;
 
-        let screen_x = screen_width() * 0.5 + self.pos.x * dim;
-        let screen_y = screen_height() * 0.5 + self.pos.y * dim;
+        let screen_x = screen_width() * 0.5 + self.pos.x * half_dim;
+        let screen_y = screen_height() * 0.5 + self.pos.y * half_dim;
 
-        draw_circle(screen_x, screen_y, Self::RADIUS * dim, self.color);
+        draw_circle(screen_x, screen_y, Self::RADIUS * half_dim, self.color);
     }
 
     fn constraint(&mut self) {
-        let delta = self.pos - Self::CONSTRAINT_CENTER;
-        let max_dist = Simulation::CONSTRAINT_RADIUS - Self::RADIUS;
-        let dist = delta.length();
-
-        if dist > max_dist {
-            self.pos -= delta.normalize() * (dist - max_dist);
-        }
+        self.pos.x = self.pos.x.clamp(-1., 1.);
+        self.pos.y = self.pos.y.clamp(-1., 1.);
     }
 
     fn distance(&self, other: &Particle) -> f32 {
@@ -78,10 +73,10 @@ struct Simulation {
 }
 
 impl Simulation {
-    /// 90% of the whole area
-    const CONSTRAINT_RADIUS: f32 = 0.9 * 0.5;
+    /// 90% in every direction from center
+    const CONSTRAINT_SIZE: f32 = 0.9;
 
-    const GRID_ROW_COUNT: usize = 200;
+    const GRID_ROW_COUNT: usize = 300;
     // const CELL_SIZE: f32 = 1. / Self::GRID_ROW_COUNT as f32;
 
     const SUBSTEPS: u32 = 8;
@@ -93,12 +88,10 @@ impl Simulation {
     }
 
     fn new() -> Self {
-        let mut res = Simulation {
+        Simulation {
             particles: Vec::new(),
             grid: vec![Vec::new(); Self::GRID_ROW_COUNT * Self::GRID_ROW_COUNT],
-        };
-        res.populate_grid();
-        res
+        }
     }
 
     fn cell_id(row: usize, col: usize) -> usize {
@@ -112,7 +105,10 @@ impl Simulation {
         let row = (y * Self::GRID_ROW_COUNT as f32) as usize;
         let col = (x * Self::GRID_ROW_COUNT as f32) as usize;
 
-        (row, col)
+        (
+            row.min(Self::GRID_ROW_COUNT - 1),
+            col.min(Self::GRID_ROW_COUNT - 1),
+        )
     }
 
     fn populate_grid(&mut self) {
@@ -215,23 +211,10 @@ impl Simulation {
         }
     }
 
-    fn draw_constraint(&self) {
-        draw_poly_lines(
-            screen_width() * 0.5,
-            screen_height() * 0.5,
-            64,
-            Self::CONSTRAINT_RADIUS * Self::dimension(),
-            0.,
-            2.,
-            WHITE,
-        );
-    }
-
     fn draw(&self) {
         for particle in self.particles.iter() {
             particle.draw();
         }
-        self.draw_constraint();
     }
 
     fn add_particle(&mut self, particle: Particle) {
@@ -244,7 +227,7 @@ impl Simulation {
 
     fn spawn_particles(&mut self) {
         let vel = Vec2::new(1.0, 0.);
-        let pos = Vec2::new(-0.3, 0.);
+        let pos = Vec2::new(-0.9, -0.6);
 
         for i in 0..Self::SPAWN_RATE {
             let y_offset = i as f32 * Particle::RADIUS * 2.0;
@@ -297,7 +280,6 @@ impl GameState {
     fn display_stats(&self) {
         let particles = self.simulation.particles.len();
         let text = format!("Particles: {}", particles);
-
         draw_text(&text, 10., 20., Self::FONT_SIZE, WHITE);
 
         let fps = get_fps();
