@@ -169,10 +169,18 @@ impl Simulation {
             return;
         }
 
-        for row in 1..Self::GRID_ROW_COUNT - 1 {
-            for col in 1..Self::GRID_ROW_COUNT - 1 {
+        for row in 0..Self::GRID_ROW_COUNT {
+            for col in 0..Self::GRID_ROW_COUNT {
                 let id1 = Self::cell_id(row, col);
                 if self.grid[id1].is_empty() {
+                    continue;
+                }
+                if row == 0
+                    || row == Self::GRID_ROW_COUNT - 1
+                    || col == 0
+                    || col == Self::GRID_ROW_COUNT - 1
+                {
+                    self.handle_collisions_two_cells(id1, id1);
                     continue;
                 }
                 for row_offset in -1..=1 {
