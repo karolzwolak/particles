@@ -1,5 +1,5 @@
 use macroquad::prelude::*;
-use std::collections::HashMap;
+use hashbrown::HashMap;
 
 #[derive(Clone, Copy)]
 /// Positon is not relative to the screen size
@@ -73,7 +73,7 @@ impl Simulation {
     /// 90% in every direction from center
     const CONSTRAINT_SIZE: f32 = 0.9;
 
-    const GRID_ROW_COUNT: usize = 300;
+    const GRID_ROW_COUNT: usize = 250;
     // const CELL_SIZE: f32 = 1. / Self::GRID_ROW_COUNT as f32;
 
     const SUBSTEPS: u32 = 8;
