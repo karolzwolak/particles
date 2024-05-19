@@ -1,4 +1,5 @@
 use macroquad::prelude::*;
+use std::collections::HashMap;
 
 #[derive(Clone, Copy)]
 /// Positon is not relative to the screen size
@@ -58,14 +59,14 @@ impl Particle {
     }
 }
 
-type Cell = Vec<usize>;
-type Grid = Vec<Cell>;
-
 struct Simulation {
     particles: Vec<Particle>,
-    /// grid is flat array of cells
-    /// each cell contains indeces of particles that are in that cell
-    grid: Grid,
+
+    /// contains sorted tuples of (particle_id, cell_id)
+    spatial_lookup: Vec<(usize, usize)>,
+    /// lookup for the first element in spatial_lookup for each occupied cell
+    first_indeces: HashMap<usize, usize>,
+    occupied_cells: Vec<usize>,
 }
 
 impl Simulation {
@@ -86,7 +87,9 @@ impl Simulation {
     fn new() -> Self {
         Simulation {
             particles: Vec::new(),
-            grid: vec![Vec::new(); Self::GRID_ROW_COUNT * Self::GRID_ROW_COUNT],
+            spatial_lookup: Vec::new(),
+            first_indeces: HashMap::new(),
+            occupied_cells: Vec::new(),
         }
     }
 
@@ -94,29 +97,42 @@ impl Simulation {
         row * Self::GRID_ROW_COUNT + col
     }
 
-    fn pos_cell(pos: Vec2) -> (usize, usize) {
+    fn pos_to_cell_id(&mut self, pos: Vec2) -> usize {
         let y = (pos.y + 1.) * 0.5;
         let x = (pos.x + 1.) * 0.5;
 
         let row = (y * Self::GRID_ROW_COUNT as f32) as usize;
         let col = (x * Self::GRID_ROW_COUNT as f32) as usize;
 
-        (
+        Self::cell_id(
             row.min(Self::GRID_ROW_COUNT - 1),
             col.min(Self::GRID_ROW_COUNT - 1),
         )
     }
 
-    fn populate_grid(&mut self) {
-        for cell in self.grid.iter_mut() {
-            cell.clear();
+    fn populate_spatial_lookup(&mut self) {
+        if self.particles.is_empty() {
+            return;
         }
+        self.first_indeces.clear();
 
-        for (i, particle) in self.particles.iter().enumerate() {
-            let (row, col) = Self::pos_cell(particle.pos);
-            let cell_id = Self::cell_id(row, col);
-            self.grid[cell_id].push(i);
+        for i in 0..self.particles.len() {
+            let cell_id = self.pos_to_cell_id(self.particles[i].pos);
+
+            self.spatial_lookup[i] = (i, cell_id);
         }
+        self.spatial_lookup
+            .sort_unstable_by_key(|&(_, cell_id)| cell_id);
+
+        for i in 0..self.spatial_lookup.len() {
+            let (_, cell_id) = self.spatial_lookup[i];
+            if i == 0 || cell_id != self.spatial_lookup[i - 1].1 {
+                self.first_indeces.insert(cell_id, i);
+            }
+        }
+        self.occupied_cells = self.first_indeces.keys().copied().collect();
+        // println!("spatial lookup {:?}", self.spatial_lookup);
+        // println!("first_indeces {:?}", self.first_indeces);
     }
 
     fn handle_collision(&mut self, a_id: usize, b_id: usize) {
@@ -130,10 +146,12 @@ impl Simulation {
         let dist_a_b = vec_a_b.length();
 
         let max_dist = 2. * Particle::RADIUS;
+        let min_dist = Particle::RADIUS * 0.1;
 
-        if dist_a_b >= max_dist{
+        if dist_a_b >= max_dist {
             return;
         }
+        let dist_a_b = dist_a_b.max(min_dist);
 
         let delta_a_b = vec_a_b * (max_dist - dist_a_b) * 0.5 / dist_a_b;
 
@@ -144,47 +162,68 @@ impl Simulation {
         b.pos += delta_a_b;
     }
 
-    fn handle_collisions_two_cells(&mut self, id1: usize, id2: usize) {
-        for i in 0..self.grid[id1].len() {
-            for j in 0..self.grid[id2].len() {
-                self.handle_collision(self.grid[id1][i], self.grid[id2][j]);
+    fn handle_collisions_two_cells(&mut self, cell_id1: usize, cell_id2: usize) {
+        let start1 = self.first_indeces.get(&cell_id1);
+        let start2 = self.first_indeces.get(&cell_id2);
+        if start1.is_none() || start2.is_none() {
+            return;
+        }
+        // println!(
+        //     "handling collisions between cells {} and {}",
+        //     cell_id1, cell_id2
+        // );
+        let first_id1 = *start1.unwrap();
+        let first_id2 = *start2.unwrap();
+
+        for i in first_id1..self.spatial_lookup.len() {
+            let (particle1_id, cell_curr1) = self.spatial_lookup[i];
+            if cell_curr1 != cell_id1 {
+                break;
+            }
+            for j in first_id2..self.spatial_lookup.len() {
+                let (particle2_id, cell_curr2) = self.spatial_lookup[j];
+                if cell_curr2 != cell_id2 {
+                    break;
+                }
+
+                self.handle_collision(particle1_id, particle2_id);
             }
         }
     }
 
     fn handle_collisions(&mut self) {
-        for row in 0..Self::GRID_ROW_COUNT {
-            for col in 0..Self::GRID_ROW_COUNT {
-                let id1 = Self::cell_id(row, col);
-                if self.grid[id1].is_empty() {
-                    continue;
-                }
-                for row_offset in -1..=1 {
-                    for col_offset in -1..=1 {
-                        let new_row = row as isize + row_offset;
-                        let new_col = col as isize + col_offset;
-                        if new_row < 0 || new_col < 0 {
-                            continue;
-                        }
-                        let new_col = new_col as usize;
-                        let new_row = new_row as usize;
-                        if new_row >= Self::GRID_ROW_COUNT || new_col >= Self::GRID_ROW_COUNT {
-                            continue;
-                        }
+        if self.particles.is_empty() {
+            return;
+        }
+        // println!("handling collisions");
+        for i in 0..self.occupied_cells.len() {
+            let cell_id = self.occupied_cells[i];
 
-                        let id2 = Self::cell_id(new_row, new_col);
-                        if self.grid[id2].is_empty() {
-                            continue;
-                        }
-                        self.handle_collisions_two_cells(id1, id2);
+            let row = cell_id / Self::GRID_ROW_COUNT;
+            let col = cell_id % Self::GRID_ROW_COUNT;
+
+            for row_offset in -1..=1 {
+                for col_offset in -1..=1 {
+                    let new_row = row as isize + row_offset;
+                    let new_col = col as isize + col_offset;
+                    if new_row < 0 || new_col < 0 {
+                        continue;
                     }
+                    let new_col = new_col as usize;
+                    let new_row = new_row as usize;
+                    if new_row >= Self::GRID_ROW_COUNT || new_col >= Self::GRID_ROW_COUNT {
+                        continue;
+                    }
+
+                    let cell_id2 = Self::cell_id(new_row, new_col);
+                    self.handle_collisions_two_cells(cell_id, cell_id2);
                 }
             }
         }
     }
 
     fn update_once(&mut self, dt: f32) {
-        self.populate_grid();
+        self.populate_spatial_lookup();
         self.handle_collisions();
         for particle in self.particles.iter_mut() {
             particle.update_verlet(dt);
@@ -206,11 +245,10 @@ impl Simulation {
     }
 
     fn add_particle(&mut self, particle: Particle) {
-        let (row, col) = Self::pos_cell(particle.pos);
-        let cell_id = Self::cell_id(row, col);
-        self.grid[cell_id].push(self.particles.len());
-
         self.particles.push(particle);
+
+        // we do not need to add valid data, because we will populate it later
+        self.spatial_lookup.push((0, 0));
     }
 
     fn spawn_particles(&mut self) {
