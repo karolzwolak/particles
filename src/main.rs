@@ -1,5 +1,4 @@
 use macroquad::prelude::*;
-use std::collections::HashMap;
 
 #[derive(Clone, Copy)]
 /// Positon is not relative to the screen size
@@ -62,18 +61,20 @@ impl Particle {
 struct Simulation {
     particles: Vec<Particle>,
 
-    /// contains sorted tuples of (particle_id, cell_id)
+    /// contains sorted tuples of (particle_id, cell_key)
     spatial_lookup: Vec<(usize, usize)>,
-    /// lookup for the first element in spatial_lookup for each occupied cell
-    first_indeces: HashMap<usize, usize>,
-    occupied_cells: Vec<usize>,
+    /// lookup for the first element in spatial_lookup for cell key
+    first_indeces: Vec<Option<usize>>,
+    is_key_occupied: Vec<bool>,
+    /// keys of cells that have particles
+    occupied_cells_ids: Vec<usize>,
 }
 
 impl Simulation {
     /// 90% in every direction from center
     const CONSTRAINT_SIZE: f32 = 0.9;
 
-    const GRID_ROW_COUNT: usize = 300;
+    const GRID_ROW_COUNT: usize = 500;
     // const CELL_SIZE: f32 = 1. / Self::GRID_ROW_COUNT as f32;
 
     const SUBSTEPS: u32 = 8;
@@ -88,8 +89,9 @@ impl Simulation {
         Simulation {
             particles: Vec::new(),
             spatial_lookup: Vec::new(),
-            first_indeces: HashMap::new(),
-            occupied_cells: Vec::new(),
+            first_indeces: Vec::new(),
+            is_key_occupied: Vec::new(),
+            occupied_cells_ids: Vec::new(),
         }
     }
 
@@ -97,14 +99,22 @@ impl Simulation {
         row * Self::GRID_ROW_COUNT + col
     }
 
-    fn pos_to_cell_id(&mut self, pos: Vec2) -> usize {
+    fn hash_cell(row: usize, col: usize) -> usize {
+        return row * 15823 + col * 9737333;
+    }
+
+    fn cell_key(&mut self,row: usize, col: usize) -> usize {
+        Self::hash_cell(row, col) % self.particles.len()
+    }
+
+    fn pos_to_cell(&mut self, pos: Vec2) -> (usize, usize) {
         let y = (pos.y + 1.) * 0.5;
         let x = (pos.x + 1.) * 0.5;
 
         let row = (y * Self::GRID_ROW_COUNT as f32) as usize;
         let col = (x * Self::GRID_ROW_COUNT as f32) as usize;
 
-        Self::cell_id(
+        (
             row.min(Self::GRID_ROW_COUNT - 1),
             col.min(Self::GRID_ROW_COUNT - 1),
         )
@@ -114,12 +124,24 @@ impl Simulation {
         if self.particles.is_empty() {
             return;
         }
-        self.first_indeces.clear();
+        self.occupied_cells_ids.clear();
 
         for i in 0..self.particles.len() {
-            let cell_id = self.pos_to_cell_id(self.particles[i].pos);
+            self.is_key_occupied[i] = false;
+            self.first_indeces[i] = None;
+        }
+        for i in 0..self.particles.len() {
+            let cell = self.pos_to_cell(self.particles[i].pos);
 
-            self.spatial_lookup[i] = (i, cell_id);
+            let cell_id = Self::cell_id(cell.0, cell.1);
+            let cell_key = self.cell_key(cell.0, cell.1);
+
+            if !self.is_key_occupied[cell_key] {
+                self.is_key_occupied[cell_key] = true;
+                self.occupied_cells_ids.push(cell_id);
+            }
+
+            self.spatial_lookup[i] = (i, cell_key);
         }
         self.spatial_lookup
             .sort_unstable_by_key(|&(_, cell_id)| cell_id);
@@ -127,10 +149,9 @@ impl Simulation {
         for i in 0..self.spatial_lookup.len() {
             let (_, cell_id) = self.spatial_lookup[i];
             if i == 0 || cell_id != self.spatial_lookup[i - 1].1 {
-                self.first_indeces.insert(cell_id, i);
+                self.first_indeces[cell_id] = Some(i);
             }
         }
-        self.occupied_cells = self.first_indeces.keys().copied().collect();
         // println!("spatial lookup {:?}", self.spatial_lookup);
         // println!("first_indeces {:?}", self.first_indeces);
     }
@@ -162,9 +183,9 @@ impl Simulation {
         b.pos += delta_a_b;
     }
 
-    fn handle_collisions_two_cells(&mut self, cell_id1: usize, cell_id2: usize) {
-        let start1 = self.first_indeces.get(&cell_id1);
-        let start2 = self.first_indeces.get(&cell_id2);
+    fn handle_collisions_two_cells(&mut self, cell_key1: usize, cell_key2: usize) {
+        let start1 = self.first_indeces[cell_key1];
+        let start2 = self.first_indeces[cell_key2];
         if start1.is_none() || start2.is_none() {
             return;
         }
@@ -172,17 +193,17 @@ impl Simulation {
         //     "handling collisions between cells {} and {}",
         //     cell_id1, cell_id2
         // );
-        let first_id1 = *start1.unwrap();
-        let first_id2 = *start2.unwrap();
+        let first_id1 = start1.unwrap();
+        let first_id2 = start2.unwrap();
 
         for i in first_id1..self.spatial_lookup.len() {
-            let (particle1_id, cell_curr1) = self.spatial_lookup[i];
-            if cell_curr1 != cell_id1 {
+            let (particle1_id, curr_cell_key1) = self.spatial_lookup[i];
+            if curr_cell_key1 != cell_key1 {
                 break;
             }
             for j in first_id2..self.spatial_lookup.len() {
-                let (particle2_id, cell_curr2) = self.spatial_lookup[j];
-                if cell_curr2 != cell_id2 {
+                let (particle2_id, curr_cell_key2) = self.spatial_lookup[j];
+                if curr_cell_key2 != cell_key2 {
                     break;
                 }
 
@@ -196,11 +217,13 @@ impl Simulation {
             return;
         }
         // println!("handling collisions");
-        for i in 0..self.occupied_cells.len() {
-            let cell_id = self.occupied_cells[i];
+        for i in 0..self.occupied_cells_ids.len() {
+            let cell_id = self.occupied_cells_ids[i];
 
             let row = cell_id / Self::GRID_ROW_COUNT;
             let col = cell_id % Self::GRID_ROW_COUNT;
+
+            let cell_key = self.cell_key(row, col);
 
             for row_offset in -1..=1 {
                 for col_offset in -1..=1 {
@@ -215,8 +238,8 @@ impl Simulation {
                         continue;
                     }
 
-                    let cell_id2 = Self::cell_id(new_row, new_col);
-                    self.handle_collisions_two_cells(cell_id, cell_id2);
+                    let cell_key2 = self.cell_key(new_row, new_col);
+                    self.handle_collisions_two_cells(cell_key, cell_key2);
                 }
             }
         }
@@ -249,6 +272,8 @@ impl Simulation {
 
         // we do not need to add valid data, because we will populate it later
         self.spatial_lookup.push((0, 0));
+        self.is_key_occupied.push(false);
+        self.first_indeces.push(None);
     }
 
     fn spawn_particles(&mut self) {
