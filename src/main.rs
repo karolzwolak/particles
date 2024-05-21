@@ -92,7 +92,7 @@ impl Simulation {
 
         let max_dist = 2. * Particle::RADIUS;
 
-        if dist_a_b >= max_dist{
+        if dist_a_b >= max_dist {
             return;
         }
         let min_dist = 0.01 * Particle::RADIUS;
@@ -107,27 +107,46 @@ impl Simulation {
         b.pos += delta_a_b;
     }
 
-    fn hande_collisions_between_groups(&mut self, split: Vec2, split_along_x: bool,a: &Vec<(usize, Vec2)> ,b: &Vec<(usize, Vec2)>) {
-        let a_close = a.iter().rev().take_while(|(_, pos)| {
-            let diff = *pos - split;
-            let val = if split_along_x { diff.x } else { diff.y };
-            val <= Particle::RADIUS
-        }).map(|(id, _)| *id).collect::<Vec<_>>();
+    fn hande_collisions_between_groups(
+        &mut self,
+        split: Vec2,
+        split_along_x: bool,
+        a: &Vec<(usize, Vec2)>,
+        b: &Vec<(usize, Vec2)>,
+    ) {
+        let a_close = a
+            .iter()
+            .rev()
+            .take_while(|(_, pos)| {
+                let diff = *pos - split;
+                let val = if split_along_x { diff.x } else { diff.y };
+                val <= Particle::RADIUS
+            })
+            .map(|(id, _)| *id)
+            .collect::<Vec<_>>();
 
-        let b_close = b.iter().take_while(|(_, pos)| {
-            let diff = split - *pos;
-            let val = if split_along_x { diff.x } else { diff.y };
-            val <= Particle::RADIUS
-        }).map(|(id, _)| *id).collect::<Vec<_>>();
+        let b_close = b
+            .iter()
+            .take_while(|(_, pos)| {
+                let diff = split - *pos;
+                let val = if split_along_x { diff.x } else { diff.y };
+                val <= Particle::RADIUS
+            })
+            .map(|(id, _)| *id)
+            .collect::<Vec<_>>();
 
-        for a_id in a_close.iter(){
-            for b_id in b_close.iter(){
+        for a_id in a_close.iter() {
+            for b_id in b_close.iter() {
                 self.handle_collision(*a_id, *b_id);
             }
         }
     }
 
-    fn divide_particles(&self,split_along_x: bool, mut particles: Vec<(usize, Vec2)>) -> (Vec2, Vec<(usize, Vec2)>, Vec<(usize, Vec2)>) {
+    fn divide_particles(
+        &self,
+        split_along_x: bool,
+        mut particles: Vec<(usize, Vec2)>,
+    ) -> (Vec2, Vec<(usize, Vec2)>, Vec<(usize, Vec2)>) {
         particles.sort_unstable_by(|a, b| {
             let pos_a = a.1;
             let pos_b = b.1;
@@ -140,7 +159,11 @@ impl Simulation {
         });
 
         let split_at = particles.len() / 2;
-        let split_pos = particles[split_at].1;
+        let split_pos = if split_at % 2 == 0 {
+            particles[split_at].1
+        } else {
+            (particles[split_at - 1].1 + particles[split_at].1) * 0.5
+        };
 
         let (a, b) = particles.split_at_mut(split_at);
 
@@ -151,21 +174,36 @@ impl Simulation {
         if particles.len() <= 1 {
             return;
         }
-        let mid = (min + max) * 0.5;
-
-        let split_along_x = mid.x.abs() >= mid.y.abs();
+        let diff = max - min;
+        let split_along_x = diff.x > diff.y;
 
         let (split, a, b) = self.divide_particles(split_along_x, particles);
+        let mut split_min = min;
+        let mut split_max = max;
+
+        if split_along_x {
+            split_min.y = split.y;
+            split_max.y = split.y;
+        } else {
+            split_min.x = split.x;
+            split_max.x = split.x;
+        }
+
         self.hande_collisions_between_groups(split, split_along_x, &a, &b);
 
-        self.divide_handle_collision(min, split, a);
-        self.divide_handle_collision(split, max, b);
+        self.divide_handle_collision(min, split_max, a);
+        self.divide_handle_collision(split_min, max, b);
     }
 
     fn handle_collisions(&mut self) {
         let min = Vec2::new(-1., -1.);
         let max = Vec2::new(1., 1.);
-        let particles = self.particles.iter().enumerate().map(|(i, p)| (i, p.pos)).collect::<Vec<_>>();
+        let particles = self
+            .particles
+            .iter()
+            .enumerate()
+            .map(|(i, p)| (i, p.pos))
+            .collect::<Vec<_>>();
         self.divide_handle_collision(min, max, particles);
     }
 
