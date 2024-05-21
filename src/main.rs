@@ -164,14 +164,17 @@ impl Simulation {
         let b = &self.particles[b_id];
 
         let vec_a_b = b.pos - a.pos;
-        let dist_a_b = vec_a_b.length();
+        let dist_a_b_2 = vec_a_b.x * vec_a_b.x + vec_a_b.y * vec_a_b.y;
 
-        let max_dist = 2. * Particle::RADIUS;
+        let max_dist2 = 4. * Particle::RADIUS * Particle::RADIUS;
         let min_dist = Particle::RADIUS * 0.1;
 
-        if dist_a_b >= max_dist {
+        if dist_a_b_2 >= max_dist2 {
             return;
         }
+        let dist_a_b = dist_a_b_2.sqrt();
+        let max_dist = 2. * Particle::RADIUS;
+
         let dist_a_b = dist_a_b.max(min_dist);
 
         let delta_a_b = vec_a_b * (max_dist - dist_a_b) * 0.5 / dist_a_b;
