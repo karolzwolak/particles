@@ -58,22 +58,13 @@ impl Particle {
     }
 }
 
-type Cell = Vec<usize>;
-type Grid = Vec<Cell>;
-
 struct Simulation {
     particles: Vec<Particle>,
-    /// grid is flat array of cells
-    /// each cell contains indeces of particles that are in that cell
-    grid: Grid,
 }
 
 impl Simulation {
     /// 90% in every direction from center
     const CONSTRAINT_SIZE: f32 = 0.9;
-
-    const GRID_ROW_COUNT: usize = 300;
-    // const CELL_SIZE: f32 = 1. / Self::GRID_ROW_COUNT as f32;
 
     const SUBSTEPS: u32 = 8;
 
@@ -86,36 +77,6 @@ impl Simulation {
     fn new() -> Self {
         Simulation {
             particles: Vec::new(),
-            grid: vec![Vec::new(); Self::GRID_ROW_COUNT * Self::GRID_ROW_COUNT],
-        }
-    }
-
-    fn cell_id(row: usize, col: usize) -> usize {
-        row * Self::GRID_ROW_COUNT + col
-    }
-
-    fn pos_cell(pos: Vec2) -> (usize, usize) {
-        let y = (pos.y + 1.) * 0.5;
-        let x = (pos.x + 1.) * 0.5;
-
-        let row = (y * Self::GRID_ROW_COUNT as f32) as usize;
-        let col = (x * Self::GRID_ROW_COUNT as f32) as usize;
-
-        (
-            row.min(Self::GRID_ROW_COUNT - 1),
-            col.min(Self::GRID_ROW_COUNT - 1),
-        )
-    }
-
-    fn populate_grid(&mut self) {
-        for cell in self.grid.iter_mut() {
-            cell.clear();
-        }
-
-        for (i, particle) in self.particles.iter().enumerate() {
-            let (row, col) = Self::pos_cell(particle.pos);
-            let cell_id = Self::cell_id(row, col);
-            self.grid[cell_id].push(i);
         }
     }
 
@@ -134,6 +95,8 @@ impl Simulation {
         if dist_a_b >= max_dist{
             return;
         }
+        let min_dist = 0.01 * Particle::RADIUS;
+        let dist_a_b = dist_a_b.max(min_dist);
 
         let delta_a_b = vec_a_b * (max_dist - dist_a_b) * 0.5 / dist_a_b;
 
@@ -144,47 +107,69 @@ impl Simulation {
         b.pos += delta_a_b;
     }
 
-    fn handle_collisions_two_cells(&mut self, id1: usize, id2: usize) {
-        for i in 0..self.grid[id1].len() {
-            for j in 0..self.grid[id2].len() {
-                self.handle_collision(self.grid[id1][i], self.grid[id2][j]);
+    fn hande_collisions_between_groups(&mut self, split: Vec2, split_along_x: bool,a: &Vec<(usize, Vec2)> ,b: &Vec<(usize, Vec2)>) {
+        let a_close = a.iter().rev().take_while(|(_, pos)| {
+            let diff = *pos - split;
+            let val = if split_along_x { diff.x } else { diff.y };
+            val <= Particle::RADIUS
+        }).map(|(id, _)| *id).collect::<Vec<_>>();
+
+        let b_close = b.iter().take_while(|(_, pos)| {
+            let diff = split - *pos;
+            let val = if split_along_x { diff.x } else { diff.y };
+            val <= Particle::RADIUS
+        }).map(|(id, _)| *id).collect::<Vec<_>>();
+
+        for a_id in a_close.iter(){
+            for b_id in b_close.iter(){
+                self.handle_collision(*a_id, *b_id);
             }
         }
+    }
+
+    fn divide_particles(&self,split_along_x: bool, mut particles: Vec<(usize, Vec2)>) -> (Vec2, Vec<(usize, Vec2)>, Vec<(usize, Vec2)>) {
+        particles.sort_unstable_by(|a, b| {
+            let pos_a = a.1;
+            let pos_b = b.1;
+
+            if split_along_x {
+                pos_a.y.partial_cmp(&pos_b.y).unwrap()
+            } else {
+                pos_a.x.partial_cmp(&pos_b.x).unwrap()
+            }
+        });
+
+        let split_at = particles.len() / 2;
+        let split_pos = particles[split_at].1;
+
+        let (a, b) = particles.split_at_mut(split_at);
+
+        (split_pos, a.to_vec(), b.to_vec())
+    }
+
+    fn divide_handle_collision(&mut self, min: Vec2, max: Vec2, particles: Vec<(usize, Vec2)>) {
+        if particles.len() <= 1 {
+            return;
+        }
+        let mid = (min + max) * 0.5;
+
+        let split_along_x = mid.x.abs() >= mid.y.abs();
+
+        let (split, a, b) = self.divide_particles(split_along_x, particles);
+        self.hande_collisions_between_groups(split, split_along_x, &a, &b);
+
+        self.divide_handle_collision(min, split, a);
+        self.divide_handle_collision(split, max, b);
     }
 
     fn handle_collisions(&mut self) {
-        for row in 0..Self::GRID_ROW_COUNT {
-            for col in 0..Self::GRID_ROW_COUNT {
-                let id1 = Self::cell_id(row, col);
-                if self.grid[id1].is_empty() {
-                    continue;
-                }
-                for row_offset in -1..=1 {
-                    for col_offset in -1..=1 {
-                        let new_row = row as isize + row_offset;
-                        let new_col = col as isize + col_offset;
-                        if new_row < 0 || new_col < 0 {
-                            continue;
-                        }
-                        let new_col = new_col as usize;
-                        let new_row = new_row as usize;
-                        if new_row >= Self::GRID_ROW_COUNT || new_col >= Self::GRID_ROW_COUNT {
-                            continue;
-                        }
-
-                        let id2 = Self::cell_id(new_row, new_col);
-                        if self.grid[id2].is_empty() {
-                            continue;
-                        }
-                        self.handle_collisions_two_cells(id1, id2);
-                    }
-                }
-            }
-        }
+        let min = Vec2::new(-1., -1.);
+        let max = Vec2::new(1., 1.);
+        let particles = self.particles.iter().enumerate().map(|(i, p)| (i, p.pos)).collect::<Vec<_>>();
+        self.divide_handle_collision(min, max, particles);
     }
 
     fn update_once(&mut self, dt: f32) {
-        self.populate_grid();
         self.handle_collisions();
         for particle in self.particles.iter_mut() {
             particle.update_verlet(dt);
@@ -206,10 +191,6 @@ impl Simulation {
     }
 
     fn add_particle(&mut self, particle: Particle) {
-        let (row, col) = Self::pos_cell(particle.pos);
-        let cell_id = Self::cell_id(row, col);
-        self.grid[cell_id].push(self.particles.len());
-
         self.particles.push(particle);
     }
 
