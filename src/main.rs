@@ -148,7 +148,7 @@ impl Simulation {
         });
 
         let split_at = particles.len() / 2;
-        let split_pos = if split_at % 2 == 0 {
+        let split_pos = if split_at % 2 == 1 {
             particles[split_at].pos
         } else {
             (particles[split_at - 1].pos + particles[split_at].pos) * 0.5
