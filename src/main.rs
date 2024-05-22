@@ -72,8 +72,8 @@ impl Simulation {
     /// 90% in every direction from center
     const CONSTRAINT_SIZE: f32 = 0.9;
 
-    const GRID_ROW_COUNT: usize = 300;
-    // const CELL_SIZE: f32 = 1. / Self::GRID_ROW_COUNT as f32;
+    const CELL_SIZE: f32 = Particle::RADIUS * 2.;
+    const GRID_ROW_COUNT: usize = (1. / Self::CELL_SIZE) as usize;
 
     const SUBSTEPS: u32 = 8;
 
@@ -131,7 +131,7 @@ impl Simulation {
 
         let max_dist = 2. * Particle::RADIUS;
 
-        if dist_a_b >= max_dist{
+        if dist_a_b >= max_dist {
             return;
         }
 
