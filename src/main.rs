@@ -18,7 +18,6 @@ impl Particle {
 
     const GRAVITY: f32 = 0.5;
     const GRAVITY_VEC: Vec2 = Vec2::new(0., Self::GRAVITY);
-    const SCALE: f32 = 0.5 * Simulation::CONSTRAINT_SIZE;
 
     fn random_color() -> Color {
         Color::new(
@@ -43,13 +42,15 @@ impl Particle {
     }
 
     fn draw(&self) {
-        // we use half of the dimension, because the position is in range [-1, 1]
-        let half_dim = Simulation::dimension() * Self::SCALE;
+        let half_dim = Simulation::half_dim();
+        let screen_pos = Simulation::to_screen_pos(self.pos);
 
-        let screen_x = screen_width() * 0.5 + self.pos.x * half_dim;
-        let screen_y = screen_height() * 0.5 + self.pos.y * half_dim;
-
-        draw_circle(screen_x, screen_y, Self::RADIUS * half_dim, self.color);
+        draw_circle(
+            screen_pos.x,
+            screen_pos.y,
+            Self::RADIUS * half_dim,
+            self.color,
+        );
     }
 
     fn constraint(&mut self) {
@@ -65,6 +66,7 @@ struct Simulation {
 impl Simulation {
     /// 90% in every direction from center
     const CONSTRAINT_SIZE: f32 = 0.9;
+    const SCALE: f32 = 0.5 * Self::CONSTRAINT_SIZE;
 
     const SUBSTEPS: u32 = 8;
 
@@ -72,6 +74,28 @@ impl Simulation {
 
     fn dimension() -> f32 {
         screen_width().min(screen_height())
+    }
+
+    fn half_dim() -> f32 {
+        Simulation::dimension() * Self::SCALE
+    }
+
+    fn to_screen_pos(local_pos: Vec2) -> Vec2 {
+        let half_dim = Self::half_dim();
+
+        let screen_x = screen_width() * 0.5 + local_pos.x * half_dim;
+        let screen_y = screen_height() * 0.5 + local_pos.y * half_dim;
+
+        Vec2::new(screen_x, screen_y)
+    }
+
+    fn to_local_pos(screen: Vec2) -> Vec2 {
+        let half_dim = Self::half_dim();
+
+        let x = screen.x - screen_width() * 0.5;
+        let y = screen.y - screen_height() * 0.5;
+
+        Vec2::new(x, y) / half_dim
     }
 
     fn new() -> Self {
@@ -230,13 +254,9 @@ impl Simulation {
     }
 
     fn spawn_at_mouse(&mut self) {
-        let mouse = mouse_position();
-        let half_dim = Self::dimension() * Particle::SCALE;
+        let mouse = Vec2::from(mouse_position());
 
-        let x = (mouse.0 - screen_width() * 0.5) / half_dim;
-        let y = (mouse.1 - screen_height() * 0.5) / half_dim;
-
-        let pos = Vec2::new(x, y);
+        let pos = Self::to_local_pos(mouse);
         let vel = Vec2::ZERO;
 
         let particle = Particle::new(pos, vel, None);
