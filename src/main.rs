@@ -111,8 +111,8 @@ impl Simulation {
         &mut self,
         split: Vec2,
         split_along_x: bool,
-        a: &Vec<(usize, Vec2)>,
-        b: &Vec<(usize, Vec2)>,
+        a: &[(usize, Vec2)],
+        b: &[(usize, Vec2)],
     ) {
         let a_close = a
             .iter()
@@ -142,11 +142,11 @@ impl Simulation {
         }
     }
 
-    fn divide_particles(
+    fn divide_particles<'a>(
         &self,
         split_along_x: bool,
-        mut particles: Vec<(usize, Vec2)>,
-    ) -> (Vec2, Vec<(usize, Vec2)>, Vec<(usize, Vec2)>) {
+        particles: &'a mut [(usize, Vec2)],
+    ) -> (Vec2, &'a mut[(usize, Vec2)], &'a mut [(usize, Vec2,)]) {
         particles.sort_unstable_by(|a, b| {
             let pos_a = a.1;
             let pos_b = b.1;
@@ -167,10 +167,10 @@ impl Simulation {
 
         let (a, b) = particles.split_at_mut(split_at);
 
-        (split_pos, a.to_vec(), b.to_vec())
+        (split_pos, a, b)
     }
 
-    fn divide_handle_collision(&mut self, min: Vec2, max: Vec2, particles: Vec<(usize, Vec2)>) {
+    fn divide_handle_collision(&mut self, min: Vec2, max: Vec2, particles: &mut [(usize, Vec2)]) {
         if particles.len() <= 1 {
             return;
         }
@@ -198,13 +198,14 @@ impl Simulation {
     fn handle_collisions(&mut self) {
         let min = Vec2::new(-1., -1.);
         let max = Vec2::new(1., 1.);
-        let particles = self
+        let mut particles = self
             .particles
             .iter()
             .enumerate()
             .map(|(i, p)| (i, p.pos))
             .collect::<Vec<_>>();
-        self.divide_handle_collision(min, max, particles);
+
+        self.divide_handle_collision(min, max, &mut particles);
     }
 
     fn update_once(&mut self, dt: f32) {
