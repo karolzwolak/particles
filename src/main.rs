@@ -14,7 +14,7 @@ struct Particle {
 impl Particle {
     /// The radius of the particle
     /// With a radius of 1, the particle will be as big as the screen
-    const RADIUS: f32 = 0.002;
+    const RADIUS: f32 = 0.012;
 
     const GRAVITY: f32 = 0.5;
     const GRAVITY_VEC: Vec2 = Vec2::new(0., Self::GRAVITY);
@@ -119,10 +119,7 @@ impl Simulation {
             .take_while(within_range)
             .collect::<Vec<_>>();
 
-        let mut b_close = b
-            .iter_mut()
-            .take_while(within_range)
-            .collect::<Vec<_>>();
+        let mut b_close = b.iter_mut().take_while(within_range).collect::<Vec<_>>();
 
         for a in a_close.iter_mut() {
             for b in b_close.iter_mut() {
@@ -234,10 +231,11 @@ impl Simulation {
 
     fn spawn_at_mouse(&mut self) {
         let mouse = mouse_position();
-        let dimension = Self::dimension();
+        let half_dim = Self::dimension() * Particle::SCALE;
 
-        let x = (mouse.0 - screen_width() * 0.5) / dimension;
-        let y = (mouse.1 - screen_height() * 0.5) / dimension;
+        let x = (mouse.0 - screen_width() * 0.5) / half_dim;
+        let y = (mouse.1 - screen_height() * 0.5) / half_dim;
+
         let pos = Vec2::new(x, y);
         let vel = Vec2::ZERO;
 
