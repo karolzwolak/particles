@@ -108,23 +108,20 @@ impl Simulation {
         a: &mut [Particle],
         b: &mut [Particle],
     ) {
+        let within_range = |p: &&mut Particle| {
+            let diff = p.pos - split;
+            let val = if split_along_x { diff.y } else { diff.x };
+            val.abs() <= Particle::RADIUS
+        };
         let mut a_close = a
             .iter_mut()
             .rev()
-            .take_while(|p| {
-                let diff = p.pos - split;
-                let val = if split_along_x { diff.x } else { diff.y };
-                val.abs() <= Particle::RADIUS
-            })
+            .take_while(within_range)
             .collect::<Vec<_>>();
 
         let mut b_close = b
             .iter_mut()
-            .take_while(|p| {
-                let diff = split - p.pos;
-                let val = if split_along_x { diff.x } else { diff.y };
-                val.abs() <= Particle::RADIUS
-            })
+            .take_while(within_range)
             .collect::<Vec<_>>();
 
         for a in a_close.iter_mut() {
