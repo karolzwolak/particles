@@ -175,7 +175,7 @@ impl Simulation {
             return;
         }
         let diff = max - min;
-        let split_along_x = diff.x > diff.y;
+        let split_along_x = diff.x < diff.y;
 
         let (split, a, b) = self.divide_particles(split_along_x, particles);
         let mut split_min = min;
