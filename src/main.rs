@@ -68,7 +68,7 @@ impl Simulation {
     const CONSTRAINT_SIZE: f32 = 0.9;
     const SCALE: f32 = 0.5 * Self::CONSTRAINT_SIZE;
 
-    const SUBSTEPS: u32 = 8;
+    const SUBSTEPS: u32 = 1;
 
     const SPAWN_RATE: usize = 10;
 
@@ -200,6 +200,18 @@ impl Simulation {
         }
 
         self.hande_collisions_between_groups(split, split_along_x, &mut a, &mut b);
+        // print debug lines
+        let split_min_screen = Self::to_screen_pos(split_min);
+        let split_max_screen = Self::to_screen_pos(split_max);
+        let color = Color::new(0.8, 0.8, 0.8, 0.25);
+        draw_line(
+            split_min_screen.x,
+            split_min_screen.y,
+            split_max_screen.x,
+            split_max_screen.y,
+            Self::half_dim() * Particle::RADIUS * 2.,
+            color,
+        );
 
         self.divide_handle_collision(min, split_max, a);
         self.divide_handle_collision(split_min, max, b);
@@ -325,8 +337,8 @@ async fn main() {
     loop {
         let delta_time = get_frame_time();
         game_state.handle_inputs();
-        game_state.update(delta_time);
         game_state.draw();
+        game_state.update(delta_time);
 
         next_frame().await;
     }
