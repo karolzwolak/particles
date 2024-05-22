@@ -145,6 +145,9 @@ impl Simulation {
 
         let mut b_close = b.iter_mut().take_while(within_range).collect::<Vec<_>>();
 
+        if a_close.is_empty() || b_close.is_empty() {
+            return;
+        }
         for a in a_close.iter_mut() {
             for b in b_close.iter_mut() {
                 self.handle_collision(a, b);
