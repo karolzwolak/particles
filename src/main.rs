@@ -147,7 +147,7 @@ impl Simulation {
 
         for a in a_close.iter_mut() {
             for b in b_close.iter_mut() {
-                self.handle_collision(*a, *b);
+                self.handle_collision(a, b);
             }
         }
     }
@@ -187,7 +187,7 @@ impl Simulation {
         let diff = max - min;
         let split_along_x = diff.x < diff.y;
 
-        let (split, mut a, mut b) = self.divide_particles(split_along_x, particles);
+        let (split, a, b) = self.divide_particles(split_along_x, particles);
         let mut split_min = min;
         let mut split_max = max;
 
@@ -199,7 +199,7 @@ impl Simulation {
             split_max.x = split.x;
         }
 
-        self.hande_collisions_between_groups(split, split_along_x, &mut a, &mut b);
+        self.hande_collisions_between_groups(split, split_along_x, a, b);
 
         self.divide_handle_collision(min, split_max, a);
         self.divide_handle_collision(split_min, max, b);
