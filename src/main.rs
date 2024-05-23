@@ -180,7 +180,7 @@ impl Simulation {
             (particles_x_sorted, particles_y_sorted)
         };
 
-        let split_pos = if split_at % 2 == 1 {
+        let split_pos = if primary_particles.len() % 2 == 1 {
             let id = primary_particles[split_at];
             self.particles[id].pos
         } else {
