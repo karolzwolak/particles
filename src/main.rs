@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use macroquad::prelude::*;
 
 #[derive(Clone, Copy)]
@@ -104,11 +106,11 @@ impl Simulation {
         }
     }
 
-    fn handle_collision(&self, a: &mut Particle, b: &mut Particle) {
-        if std::ptr::eq(a, b) {
+    fn handle_collision(&mut self, a_id: usize, b_id: usize) {
+        if a_id == b_id {
             return;
         }
-        let vec_a_b = b.pos - a.pos;
+        let vec_a_b = self.particles[b_id].pos - self.particles[a_id].pos;
         let dist_a_b = vec_a_b.length();
 
         let max_dist = 2. * Particle::RADIUS;
@@ -121,36 +123,41 @@ impl Simulation {
 
         let delta_a_b = vec_a_b * (max_dist - dist_a_b) * 0.5 / dist_a_b;
 
-        a.pos -= delta_a_b;
-        b.pos += delta_a_b;
+        self.particles[a_id].pos -= delta_a_b;
+        self.particles[b_id].pos -= delta_a_b;
     }
 
     fn hande_collisions_between_groups(
-        &self,
+        &mut self,
         split: Vec2,
         split_along_x: bool,
-        a: &mut [Particle],
-        b: &mut [Particle],
+        a: &[usize],
+        b: &[usize],
     ) {
-        let within_range = |p: &&mut Particle| {
-            let diff = p.pos - split;
+        let within_range = |p_id: &usize| {
+            let diff = self.particles[*p_id].pos - split;
             let val = if split_along_x { diff.y } else { diff.x };
             val.abs() <= 2. * Particle::RADIUS
         };
-        let mut a_close = a
-            .iter_mut()
+        let a_close = a
+            .iter()
+            .copied()
             .rev()
             .take_while(within_range)
             .collect::<Vec<_>>();
 
-        let mut b_close = b.iter_mut().take_while(within_range).collect::<Vec<_>>();
+        let b_close = b
+            .iter()
+            .copied()
+            .take_while(within_range)
+            .collect::<Vec<_>>();
 
         if a_close.is_empty() || b_close.is_empty() {
             return;
         }
-        for a in a_close.iter_mut() {
-            for b in b_close.iter_mut() {
-                self.handle_collision(a, b);
+        for a in a_close.iter() {
+            for b in b_close.iter() {
+                self.handle_collision(*a, *b);
             }
         }
     }
@@ -158,39 +165,74 @@ impl Simulation {
     fn divide_particles<'a>(
         &self,
         split_along_x: bool,
-        particles: &'a mut [Particle],
-    ) -> (Vec2, &'a mut [Particle], &'a mut [Particle]) {
-        particles.sort_unstable_by(|a, b| {
-            let pos_a = a.pos;
-            let pos_b = b.pos;
+        particles_x_sorted: &'a mut [usize],
+        particles_y_sorted: &'a mut [usize],
+    ) -> (
+        Vec2,
+        (&'a mut [usize], &'a mut [usize]),
+        (&'a mut [usize], &'a mut [usize]),
+    ) {
+        let split_at = particles_x_sorted.len() / 2;
 
-            if split_along_x {
-                pos_a.y.partial_cmp(&pos_b.y).unwrap()
-            } else {
-                pos_a.x.partial_cmp(&pos_b.x).unwrap()
-            }
-        });
-
-        let split_at = particles.len() / 2;
-        let split_pos = if split_at % 2 == 1 {
-            particles[split_at].pos
+        let (primary_particles, secondary_particles) = if split_along_x {
+            (particles_y_sorted, particles_x_sorted)
         } else {
-            (particles[split_at - 1].pos + particles[split_at].pos) * 0.5
+            (particles_x_sorted, particles_y_sorted)
         };
 
-        let (a, b) = particles.split_at_mut(split_at);
+        let split_pos = if split_at % 2 == 1 {
+            let id = primary_particles[split_at];
+            self.particles[id].pos
+        } else {
+            let id = primary_particles[split_at];
+            let prev_id = primary_particles[split_at - 1];
+            (self.particles[id].pos + self.particles[prev_id].pos) * 0.5
+        };
 
-        (split_pos, a, b)
+        let primary_div = primary_particles.split_at_mut(split_at);
+        let primary_a_indeces = primary_div.0.iter().copied().collect::<HashSet<_>>();
+
+        let secondary_clone = secondary_particles.iter().copied().collect::<Vec<_>>();
+        let secondary_div = secondary_particles.split_at_mut(split_at);
+
+        let mut a_count = 0;
+        let mut b_count = 0;
+        for p_id in secondary_clone {
+            // additional condition to skip cheking the set if a is full
+            if a_count < split_at && primary_a_indeces.contains(&p_id) {
+                secondary_div.0[a_count] = p_id;
+                a_count += 1;
+            } else {
+                secondary_div.1[b_count] = p_id;
+                b_count += 1;
+            }
+        }
+
+        let (x_sorted_div, y_sorted_div) = if split_along_x {
+            (secondary_div, primary_div)
+        } else {
+            (primary_div, secondary_div)
+        };
+
+        (split_pos, x_sorted_div, y_sorted_div)
     }
 
-    fn divide_handle_collision(&mut self, min: Vec2, max: Vec2, particles: &mut [Particle]) {
-        if particles.len() <= 1 {
+    fn divide_handle_collision(
+        &mut self,
+        min: Vec2,
+        max: Vec2,
+        particles_x_sorted: &mut [usize],
+        particles_y_sorted: &mut [usize],
+    ) {
+        if particles_x_sorted.len() <= 1 {
             return;
         }
+
         let diff = max - min;
         let split_along_x = diff.x < diff.y;
 
-        let (split, a, b) = self.divide_particles(split_along_x, particles);
+        let (split, x_sorted_div, y_sorted_div) =
+            self.divide_particles(split_along_x, particles_x_sorted, particles_y_sorted);
         let mut split_min = min;
         let mut split_max = max;
 
@@ -202,20 +244,36 @@ impl Simulation {
             split_max.x = split.x;
         }
 
-        self.hande_collisions_between_groups(split, split_along_x, a, b);
+        // both vectors contain the same particles, so we can always pass x sorted one
+        self.hande_collisions_between_groups(split, split_along_x, x_sorted_div.0, x_sorted_div.1);
 
-        self.divide_handle_collision(min, split_max, a);
-        self.divide_handle_collision(split_min, max, b);
+        self.divide_handle_collision(min, split_max, x_sorted_div.0, y_sorted_div.0);
+        self.divide_handle_collision(split_min, max, x_sorted_div.1, y_sorted_div.1);
     }
 
     fn handle_collisions(&mut self) {
         let min = Vec2::new(-1., -1.);
         let max = Vec2::new(1., 1.);
-        let mut particles = std::mem::take(&mut self.particles);
 
-        self.divide_handle_collision(min, max, &mut particles);
+        let indeces = (0..self.particles.len()).collect::<Vec<_>>();
 
-        self.particles = particles;
+        let mut particles_x_sorted = indeces.clone();
+        let mut particles_y_sorted = indeces;
+
+        particles_x_sorted.sort_unstable_by(|a_id, b_id| {
+            let pos_a = self.particles[*a_id].pos;
+            let pos_b = self.particles[*b_id].pos;
+
+            pos_a.x.partial_cmp(&pos_b.x).unwrap()
+        });
+        particles_y_sorted.sort_unstable_by(|a_id, b_id| {
+            let pos_a = self.particles[*a_id].pos;
+            let pos_b = self.particles[*b_id].pos;
+
+            pos_a.y.partial_cmp(&pos_b.y).unwrap()
+        });
+
+        self.divide_handle_collision(min, max, &mut particles_x_sorted, &mut particles_y_sorted);
     }
 
     fn update_once(&mut self, dt: f32) {
