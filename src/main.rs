@@ -1,5 +1,7 @@
 use macroquad::prelude::*;
 
+use rayon::prelude::*;
+
 #[derive(Clone, Copy)]
 /// Positon is not relative to the screen size
 /// It is in range [-1, 1]
@@ -183,7 +185,7 @@ impl Simulation {
         (split_pos, a, b)
     }
 
-    fn divide_handle_collision(&mut self, min: Vec2, max: Vec2, particles: &mut [Particle]) {
+    fn divide_handle_collision(&self, min: Vec2, max: Vec2, particles: &mut [Particle]) {
         if particles.len() <= 1 {
             return;
         }
@@ -204,8 +206,14 @@ impl Simulation {
 
         self.hande_collisions_between_groups(split, split_along_x, a, b);
 
-        self.divide_handle_collision(min, split_max, a);
-        self.divide_handle_collision(split_min, max, b);
+        rayon::scope(|s| {
+            s.spawn(|_| {
+                self.divide_handle_collision(min, split_max, a);
+            });
+            s.spawn(|_| {
+                self.divide_handle_collision(split_min, max, b);
+            });
+        });
     }
 
     fn handle_collisions(&mut self) {
