@@ -233,6 +233,7 @@ impl Simulation {
 
         let (split, x_sorted_div, y_sorted_div) =
             self.divide_particles(split_along_x, particles_x_sorted, particles_y_sorted);
+
         let mut split_min = min;
         let mut split_max = max;
 
@@ -244,8 +245,13 @@ impl Simulation {
             split_max.x = split.x;
         }
 
-        // both vectors contain the same particles, so we can always pass x sorted one
-        self.hande_collisions_between_groups(split, split_along_x, x_sorted_div.0, x_sorted_div.1);
+        let primary_div = if split_along_x {
+            &y_sorted_div
+        } else {
+            &x_sorted_div
+        };
+
+        self.hande_collisions_between_groups(split, split_along_x, primary_div.0, primary_div.1);
 
         self.divide_handle_collision(min, split_max, x_sorted_div.0, y_sorted_div.0);
         self.divide_handle_collision(split_min, max, x_sorted_div.1, y_sorted_div.1);
