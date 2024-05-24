@@ -124,7 +124,7 @@ impl Simulation {
         let delta_a_b = vec_a_b * (max_dist - dist_a_b) * 0.5 / dist_a_b;
 
         self.particles[a_id].pos -= delta_a_b;
-        self.particles[b_id].pos -= delta_a_b;
+        self.particles[b_id].pos += delta_a_b;
     }
 
     fn hande_collisions_between_groups(
