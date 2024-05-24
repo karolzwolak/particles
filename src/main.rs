@@ -63,6 +63,7 @@ impl Particle {
 
 struct Simulation {
     particles: Vec<Particle>,
+    collisions_to_handle: Vec<(Vec<usize>, Vec<usize>)>,
 }
 
 impl Simulation {
@@ -103,6 +104,7 @@ impl Simulation {
     fn new() -> Self {
         Simulation {
             particles: Vec::new(),
+            collisions_to_handle: Vec::new(),
         }
     }
 
@@ -155,11 +157,7 @@ impl Simulation {
         if a_close.is_empty() || b_close.is_empty() {
             return;
         }
-        for a in a_close.iter() {
-            for b in b_close.iter() {
-                self.handle_collision(*a, *b);
-            }
-        }
+        self.collisions_to_handle.push((a_close, b_close));
     }
 
     fn divide_particles<'a>(
@@ -280,6 +278,15 @@ impl Simulation {
         });
 
         self.divide_handle_collision(min, max, &mut particles_x_sorted, &mut particles_y_sorted);
+
+        let collisions_to_handle = std::mem::take(&mut self.collisions_to_handle);
+        for (a_close, b_close) in collisions_to_handle.iter() {
+            for a in a_close.iter() {
+                for b in b_close.iter() {
+                    self.handle_collision(*a, *b);
+                }
+            }
+        }
     }
 
     fn update_once(&mut self, dt: f32) {
