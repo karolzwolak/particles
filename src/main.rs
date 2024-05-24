@@ -20,6 +20,12 @@ impl Particle {
     const GRAVITY_VEC: Vec2 = Vec2::new(0., Self::GRAVITY);
     const SCALE: f32 = 0.5 * Simulation::CONSTRAINT_SIZE;
 
+    const MAX_DIST: f32 = 2. * Self::RADIUS;
+    const MAX_DIST2: f32 = Self::MAX_DIST * Self::MAX_DIST;
+
+    const MIN_DIST: f32 = 0.01 * Self::RADIUS;
+    const MIN_DIST2: f32 = Self::MIN_DIST * Self::MIN_DIST;
+
     fn random_color() -> Color {
         Color::new(
             rand::gen_range(0., 1.),
@@ -127,15 +133,18 @@ impl Simulation {
         let b = &self.particles[b_id];
 
         let vec_a_b = b.pos - a.pos;
-        let dist_a_b = vec_a_b.length();
+        let dist_a_b_2 = vec_a_b.length_squared();
 
-        let max_dist = 2. * Particle::RADIUS;
-
-        if dist_a_b >= max_dist {
+        if dist_a_b_2 >= Particle::MAX_DIST2 {
             return;
         }
+        let dist_a_b = if dist_a_b_2 > Particle::MIN_DIST2 {
+            dist_a_b_2.sqrt()
+        } else {
+            Particle::MIN_DIST
+        };
 
-        let delta_a_b = vec_a_b * (max_dist - dist_a_b) * 0.5 / dist_a_b;
+        let delta_a_b = vec_a_b * (Particle::MAX_DIST - dist_a_b) * 0.5 / dist_a_b;
 
         let a = &mut self.particles[a_id];
         a.pos -= delta_a_b;
