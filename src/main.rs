@@ -137,13 +137,9 @@ impl Simulation {
             let val = if split_along_x { diff.y } else { diff.x };
             val.abs() <= 2. * Particle::RADIUS
         };
-        let mut a_close = a
-            .iter_mut()
-            .rev()
-            .take_while(within_range)
-            .collect::<Vec<_>>();
+        let mut a_close = a.iter_mut().rev().filter(within_range).collect::<Vec<_>>();
 
-        let mut b_close = b.iter_mut().take_while(within_range).collect::<Vec<_>>();
+        let mut b_close = b.iter_mut().filter(within_range).collect::<Vec<_>>();
 
         if a_close.is_empty() || b_close.is_empty() {
             return;
@@ -159,28 +155,38 @@ impl Simulation {
         &self,
         split_along_x: bool,
         particles: &'a mut [Particle],
-    ) -> (Vec2, &'a mut [Particle], &'a mut [Particle]) {
-        particles.sort_unstable_by(|a, b| {
-            let pos_a = a.pos;
-            let pos_b = b.pos;
+    ) -> (Vec2, (&'a mut [Particle], &'a mut [Particle])) {
+        let split_pos = particles
+            .iter()
+            .map(|p| p.pos)
+            .fold(Vec2::ZERO, |acc, pos| acc + pos)
+            / particles.len() as f32;
 
-            if split_along_x {
-                pos_a.y.partial_cmp(&pos_b.y).unwrap()
+        let particles_clone = particles.iter().copied().collect::<Vec<_>>();
+
+        let mut a_count = 0;
+        let mut b_count = 0;
+
+        for particle in particles_clone {
+            let in_a_half = if split_along_x {
+                particle.pos.y < split_pos.y
             } else {
-                pos_a.x.partial_cmp(&pos_b.x).unwrap()
+                particle.pos.x < split_pos.x
+            };
+            if in_a_half {
+                particles[a_count] = particle;
+                a_count += 1;
+            } else {
+                particles[particles.len() - 1 - b_count] = particle;
+                b_count += 1;
             }
-        });
-
-        let split_at = particles.len() / 2;
-        let split_pos = if split_at % 2 == 1 {
-            particles[split_at].pos
+        }
+        let split_at = if a_count == 0 || b_count == 0 {
+            particles.len() / 2
         } else {
-            (particles[split_at - 1].pos + particles[split_at].pos) * 0.5
+            a_count
         };
-
-        let (a, b) = particles.split_at_mut(split_at);
-
-        (split_pos, a, b)
+        (split_pos, particles.split_at_mut(split_at))
     }
 
     fn divide_handle_collision(&mut self, min: Vec2, max: Vec2, particles: &mut [Particle]) {
@@ -190,7 +196,7 @@ impl Simulation {
         let diff = max - min;
         let split_along_x = diff.x < diff.y;
 
-        let (split, a, b) = self.divide_particles(split_along_x, particles);
+        let (split, (a, b)) = self.divide_particles(split_along_x, particles);
         let mut split_min = min;
         let mut split_max = max;
 
