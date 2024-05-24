@@ -162,26 +162,23 @@ impl Simulation {
     }
 
     fn handle_collisions(&mut self) {
-        for row in 0..Self::GRID_ROW_COUNT {
-            for col in 0..Self::GRID_ROW_COUNT {
-                let id1 = Self::cell_id(row, col);
+        let grid_size = Self::GRID_ROW_COUNT as isize;
+
+        for row in 1..Self::GRID_ROW_COUNT - 1 {
+            let row_comp = row * Self::GRID_ROW_COUNT;
+
+            for col in 1..Self::GRID_ROW_COUNT - 1 {
+                let id1 = row_comp + col;
                 if self.grid[id1].is_empty() {
                     continue;
                 }
                 for row_offset in -1..=1 {
-                    for col_offset in -1..=1 {
-                        let new_row = row as isize + row_offset;
-                        let new_col = col as isize + col_offset;
-                        if new_row < 0 || new_col < 0 {
-                            continue;
-                        }
-                        let new_col = new_col as usize;
-                        let new_row = new_row as usize;
-                        if new_row >= Self::GRID_ROW_COUNT || new_col >= Self::GRID_ROW_COUNT {
-                            continue;
-                        }
+                    let row_comp_offset = row_offset * grid_size;
 
-                        let id2 = Self::cell_id(new_row, new_col);
+                    for col_offset in -1..=1 {
+                        let offset = row_comp_offset + col_offset;
+                        let id2 = (id1 as isize + offset) as usize;
+
                         if self.grid[id2].is_empty() {
                             continue;
                         }
@@ -190,8 +187,46 @@ impl Simulation {
                 }
             }
         }
-    }
 
+        for row in 0..Self::GRID_ROW_COUNT {
+            let row_comp = row * Self::GRID_ROW_COUNT;
+
+            let mut col = 0;
+            while col < Self::GRID_ROW_COUNT {
+                if col == 1 && (1..Self::GRID_ROW_COUNT - 1).contains(&row) {
+                    col = Self::GRID_ROW_COUNT - 1;
+                }
+                let id1 = row_comp + col;
+                if self.grid[id1].is_empty() {
+                    col += 1;
+                    continue;
+                }
+                for row_offset in -1..=1 {
+                    let new_row = row as isize + row_offset;
+                    if new_row < 0 || new_row >= grid_size {
+                        continue;
+                    }
+                    let row_comp_offset = row_offset * grid_size;
+
+                    for col_offset in -1..=1 {
+                        let new_col = col as isize + col_offset;
+                        if new_col < 0 || new_col >= grid_size {
+                            continue;
+                        }
+                        let offset = row_comp_offset + col_offset;
+                        let id2 = (id1 as isize + offset) as usize;
+
+                        if self.grid[id2].is_empty() {
+                            continue;
+                        }
+                        self.handle_collisions_two_cells(id1, id2);
+                    }
+                }
+
+                col += 1;
+            }
+        }
+    }
     fn update_once(&mut self, dt: f32) {
         self.populate_grid();
         self.handle_collisions();
