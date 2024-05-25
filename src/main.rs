@@ -64,21 +64,57 @@ impl Particle {
     }
 }
 
-type Cell = Vec<usize>;
-type Grid = Vec<Cell>;
+const GRID_CELL_CAPACITY: usize = 4;
+
+#[derive(Clone)]
+struct GridCell {
+    len: usize,
+    particles: [u32; GRID_CELL_CAPACITY],
+}
+
+impl GridCell {
+    fn new() -> Self {
+        GridCell {
+            len: 0,
+            particles: [0; GRID_CELL_CAPACITY],
+        }
+    }
+
+    fn add_particle(&mut self, particle_id: u32) {
+        if self.len == GRID_CELL_CAPACITY {
+            return;
+        }
+        self.particles[self.len] = particle_id;
+        self.len += 1;
+    }
+
+    fn clear(&mut self) {
+        self.len = 0;
+    }
+
+    fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+}
+
+impl std::ops::Index<usize> for GridCell {
+    type Output = u32;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.particles[index]
+    }
+}
 
 struct Simulation {
     particles: Vec<Particle>,
-    /// grid is flat array of cells
-    /// each cell contains indeces of particles that are in that cell
-    grid: Grid,
+    grid: Vec<GridCell>,
 }
 
 impl Simulation {
     /// 90% in every direction from center
     const CONSTRAINT_SIZE: f32 = 0.9;
 
-    const CELL_SIZE: f32 = Particle::RADIUS * 2.;
+    const CELL_SIZE: f32 = Particle::RADIUS;
     const GRID_ROW_COUNT: usize = (1. / Self::CELL_SIZE) as usize;
 
     const SUBSTEPS: u32 = 8;
@@ -92,7 +128,7 @@ impl Simulation {
     fn new() -> Self {
         Simulation {
             particles: Vec::new(),
-            grid: vec![Vec::new(); Self::GRID_ROW_COUNT * Self::GRID_ROW_COUNT],
+            grid: vec![GridCell::new(); Self::GRID_ROW_COUNT * Self::GRID_ROW_COUNT],
         }
     }
 
@@ -121,7 +157,7 @@ impl Simulation {
         for (i, particle) in self.particles.iter().enumerate() {
             let (row, col) = Self::pos_cell(particle.pos);
             let cell_id = Self::cell_id(row, col);
-            self.grid[cell_id].push(i);
+            self.grid[cell_id].add_particle(i as u32);
         }
     }
 
@@ -154,9 +190,9 @@ impl Simulation {
     }
 
     fn handle_collisions_two_cells(&mut self, id1: usize, id2: usize) {
-        for i in 0..self.grid[id1].len() {
-            for j in 0..self.grid[id2].len() {
-                self.handle_collision(self.grid[id1][i], self.grid[id2][j]);
+        for i in 0..self.grid[id1].len {
+            for j in 0..self.grid[id2].len {
+                self.handle_collision(self.grid[id1][i] as usize, self.grid[id2][j] as usize);
             }
         }
     }
@@ -252,7 +288,7 @@ impl Simulation {
     fn add_particle(&mut self, particle: Particle) {
         let (row, col) = Self::pos_cell(particle.pos);
         let cell_id = Self::cell_id(row, col);
-        self.grid[cell_id].push(self.particles.len());
+        self.grid[cell_id].add_particle(self.particles.len() as u32);
 
         self.particles.push(particle);
     }
