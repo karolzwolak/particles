@@ -197,6 +197,12 @@ impl Simulation {
         }
     }
 
+    fn handle_collisions_particle_cell(&mut self, particle_id: usize, cell_id: usize) {
+        for i in 0..self.grid[cell_id].len {
+            self.handle_collision(particle_id, self.grid[cell_id][i] as usize);
+        }
+    }
+
     fn handle_collisions(&mut self) {
         let grid_size = Self::GRID_ROW_COUNT as isize;
 
@@ -204,19 +210,38 @@ impl Simulation {
             let row_comp = row * Self::GRID_ROW_COUNT;
 
             for col in 1..Self::GRID_ROW_COUNT - 1 {
-                let id1 = row_comp + col;
-                if self.grid[id1].is_empty() {
-                    continue;
+                let cell_id = row_comp + col;
+                for i in 0..self.grid[cell_id].len {
+                    let particle_id = self.grid[cell_id][i] as usize;
+
+                    self.handle_collisions_particle_cell(particle_id, cell_id);
+                    self.handle_collisions_particle_cell(particle_id, cell_id - 1);
+                    self.handle_collisions_particle_cell(particle_id, cell_id + 1);
+                    self.handle_collisions_particle_cell(
+                        particle_id,
+                        cell_id + Self::GRID_ROW_COUNT,
+                    );
+                    self.handle_collisions_particle_cell(
+                        particle_id,
+                        cell_id - Self::GRID_ROW_COUNT,
+                    );
+                    self.handle_collisions_particle_cell(
+                        particle_id,
+                        cell_id + Self::GRID_ROW_COUNT - 1,
+                    );
+                    self.handle_collisions_particle_cell(
+                        particle_id,
+                        cell_id - Self::GRID_ROW_COUNT + 1,
+                    );
+                    self.handle_collisions_particle_cell(
+                        particle_id,
+                        cell_id + Self::GRID_ROW_COUNT + 1,
+                    );
+                    self.handle_collisions_particle_cell(
+                        particle_id,
+                        cell_id - Self::GRID_ROW_COUNT - 1,
+                    );
                 }
-                self.handle_collisions_two_cells(id1, id1);
-                self.handle_collisions_two_cells(id1, id1 - 1);
-                self.handle_collisions_two_cells(id1, id1 + 1);
-                self.handle_collisions_two_cells(id1, id1 + Self::GRID_ROW_COUNT);
-                self.handle_collisions_two_cells(id1, id1 - Self::GRID_ROW_COUNT);
-                self.handle_collisions_two_cells(id1, id1 + Self::GRID_ROW_COUNT - 1);
-                self.handle_collisions_two_cells(id1, id1 - Self::GRID_ROW_COUNT + 1);
-                self.handle_collisions_two_cells(id1, id1 + Self::GRID_ROW_COUNT + 1);
-                self.handle_collisions_two_cells(id1, id1 - Self::GRID_ROW_COUNT - 1);
             }
         }
 
