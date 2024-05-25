@@ -208,19 +208,15 @@ impl Simulation {
                 if self.grid[id1].is_empty() {
                     continue;
                 }
-                for row_offset in -1..=1 {
-                    let row_comp_offset = row_offset * grid_size;
-
-                    for col_offset in -1..=1 {
-                        let offset = row_comp_offset + col_offset;
-                        let id2 = (id1 as isize + offset) as usize;
-
-                        if self.grid[id2].is_empty() {
-                            continue;
-                        }
-                        self.handle_collisions_two_cells(id1, id2);
-                    }
-                }
+                self.handle_collisions_two_cells(id1, id1);
+                self.handle_collisions_two_cells(id1, id1 - 1);
+                self.handle_collisions_two_cells(id1, id1 + 1);
+                self.handle_collisions_two_cells(id1, id1 + Self::GRID_ROW_COUNT);
+                self.handle_collisions_two_cells(id1, id1 - Self::GRID_ROW_COUNT);
+                self.handle_collisions_two_cells(id1, id1 + Self::GRID_ROW_COUNT - 1);
+                self.handle_collisions_two_cells(id1, id1 - Self::GRID_ROW_COUNT + 1);
+                self.handle_collisions_two_cells(id1, id1 + Self::GRID_ROW_COUNT + 1);
+                self.handle_collisions_two_cells(id1, id1 - Self::GRID_ROW_COUNT - 1);
             }
         }
 
